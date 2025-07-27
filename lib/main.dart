@@ -1,6 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:inventory_management_system/firebase_options.dart';
 
-void main() {
+// import 'package:auth_firebase/firebase_options.dart';
+// import 'pages/signup/signup.dart';
+Future <void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform
+  );
+
   runApp(const MyApp());
 }
 
