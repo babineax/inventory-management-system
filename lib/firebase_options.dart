@@ -43,9 +43,9 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyDvykMsWLlXCLvwNT4KMgUFo2QNAK24QCw',
     appId: '1:748397217426:web:74c734ec92987c0b4d084b',
     messagingSenderId: '748397217426',
-    projectId: 'inventory-management-sys-d77af',
-    authDomain: 'inventory-management-sys-d77af.firebaseapp.com',
-    storageBucket: 'inventory-management-sys-d77af.firebasestorage.app',
+    projectId: 'inventory-sys-974aa',
+    authDomain: 'inventory-sys-974aa.firebaseapp.com',
+    storageBucket: 'inventory-sys-974aa.firebasestorage.app',
     measurementId: 'G-2Y1X1NPG54',
   );
 
@@ -53,16 +53,16 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyDaYx0kP4DG9GMnpyp_JNVQLvFZW2UQYs8',
     appId: '1:748397217426:android:14f43e687dc56dc34d084b',
     messagingSenderId: '748397217426',
-    projectId: 'inventory-management-sys-d77af',
-    storageBucket: 'inventory-management-sys-d77af.firebasestorage.app',
+    projectId: 'inventory-sys-974aa',
+    storageBucket: 'inventory-sys-974aa.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDYZy0lWoysDdBd70Iuy9IeYNLkq5EbY0g',
     appId: '1:748397217426:ios:982627e793b219f24d084b',
     messagingSenderId: '748397217426',
-    projectId: 'inventory-management-sys-d77af',
-    storageBucket: 'inventory-management-sys-d77af.firebasestorage.app',
+    projectId: 'inventory-sys-974aa',
+    storageBucket: 'inventory-sys-974aa.firebasestorage.app',
     iosBundleId: 'com.example.inventoryManagementSystem',
   );
 
@@ -70,8 +70,8 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyDYZy0lWoysDdBd70Iuy9IeYNLkq5EbY0g',
     appId: '1:748397217426:ios:982627e793b219f24d084b',
     messagingSenderId: '748397217426',
-    projectId: 'inventory-management-sys-d77af',
-    storageBucket: 'inventory-management-sys-d77af.firebasestorage.app',
+    projectId: 'inventory-sys-974aa',
+    storageBucket: 'inventory-sys-974aa.firebasestorage.app',
     iosBundleId: 'com.example.inventoryManagementSystem',
   );
 
@@ -79,9 +79,9 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyDvykMsWLlXCLvwNT4KMgUFo2QNAK24QCw',
     appId: '1:748397217426:web:ecba870a11933b5f4d084b',
     messagingSenderId: '748397217426',
-    projectId: 'inventory-management-sys-d77af',
-    authDomain: 'inventory-management-sys-d77af.firebaseapp.com',
-    storageBucket: 'inventory-management-sys-d77af.firebasestorage.app',
+    projectId: 'inventory-sys-974aa',
+    authDomain: 'inventory-sys-974aa.firebaseapp.com',
+    storageBucket: 'inventory-sys-974aa.firebasestorage.app',
     measurementId: 'G-9Y32HKDMC2',
   );
 }

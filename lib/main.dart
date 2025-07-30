@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:inventory_management_system/firebase_options.dart';
+import 'package:inventory_management_system/widget_tree.dart';
 
 // import 'package:auth_firebase/firebase_options.dart';
 // import 'pages/signup/signup.dart';
@@ -41,7 +42,8 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Inventory Home Page'),
+      home: const WidgetTree(),
+      //const MyHomePage(title: 'Inventory Home Page'),
     );
   }
 }
