@@ -39,6 +39,10 @@ dependencies:
   firebase_auth: ^4.16.0
   # fluttertoast: ^8.2.5
   google_fonts: ^6.2.0
+  path_provider: ^2.1.5
+
+dependency_overrides:
+  win32: ^5.5.0
 
 dev_dependencies:
   flutter_test:
