@@ -58,10 +58,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _errorMessage() {
-    return Text(
-  errorMessage == '' ? '' : '⚠️ $errorMessage',
-  style: const TextStyle(color: Colors.red),
-    );
+    return Text(errorMessage == '' ? '' : 'humm ? $errorMessage');
   }
 
   Widget _submitButton() {
