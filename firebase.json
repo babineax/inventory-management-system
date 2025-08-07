@@ -1,25 +1,39 @@
 {
-    "flutter": {
-        "platforms": {
-            "android": {
-                "default": {
-                    "projectId": "inventory-management-sys-d77af",
-                    "appId": "1:748397217426:android:14f43e687dc56dc34d084b",
-                    "fileOutput": "android/app/google-services.json"
-                }
-            },
-            "dart": {
-                "lib/firebase_options.dart": {
-                    "projectId": "inventory-management-sys-d77af",
-                    "configurations": {
-                        "android": "1:748397217426:android:14f43e687dc56dc34d084b",
-                        "ios": "1:748397217426:ios:982627e793b219f24d084b",
-                        "macos": "1:748397217426:ios:982627e793b219f24d084b",
-                        "web": "1:748397217426:web:74c734ec92987c0b4d084b",
-                        "windows": "1:748397217426:web:ecba870a11933b5f4d084b"
-                    }
-                }
-            }
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "inventory-management-sys-d77af",
+          "appId": "1:748397217426:android:14f43e687dc56dc34d084b",
+          "fileOutput": "android/app/google-services.json"
         }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "inventory-management-sys-d77af",
+          "configurations": {
+            "android": "1:748397217426:android:14f43e687dc56dc34d084b",
+            "ios": "1:748397217426:ios:982627e793b219f24d084b",
+            "macos": "1:748397217426:ios:982627e793b219f24d084b",
+            "web": "1:748397217426:web:74c734ec92987c0b4d084b",
+            "windows": "1:748397217426:web:ecba870a11933b5f4d084b"
+          }
+        }
+      }
     }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": []
+    }
+  ]
 }
