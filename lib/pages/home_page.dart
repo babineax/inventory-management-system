@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:inventory_management_system/auth.dart';
 import 'package:flutter/material.dart';
 import 'package:inventory_management_system/screens/stock_list_screen.dart';
+import 'package:inventory_management_system/screens/dashboard_screen.dart';
 
 class HomePage extends StatelessWidget {
   HomePage({Key? key}) : super(key: key);
@@ -42,6 +43,21 @@ class HomePage extends StatelessWidget {
     );
   }
 
+  // Navigate to Dashboard screen
+  void _goToDashboard(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const DashboardScreen()),
+    );
+  }
+
+  Widget _viewDashboardButton(BuildContext context) {
+    return ElevatedButton(
+      onPressed: () => _goToDashboard(context),
+      child: const Text('Go to Dashboard'),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -60,7 +76,9 @@ class HomePage extends StatelessWidget {
             const SizedBox(height: 20),
             _signOutButton(),
             const SizedBox(height: 20),
-            _viewStockButton(context), // New button to view stock items
+            _viewStockButton(context), // Stock list button
+            const SizedBox(height: 20),
+            _viewDashboardButton(context), // Dashboard button
           ],
         ), // Column
       ), // Container
