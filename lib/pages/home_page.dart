@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/user_model.dart';
+import '../services/auth_service.dart';
 import '../screens/inventory_list_screen.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/stock_movements_screen.dart';
@@ -45,6 +46,18 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _loadUserProfile() async {
     try {
+      // Get current user from AuthService
+      currentUser = AuthService.currentUser;
+
+      // Listen to auth state changes
+      AuthService.authStateChanges.listen((user) {
+        if (mounted) {
+          setState(() {
+            currentUser = user;
+          });
+        }
+      });
+
       setState(() {
         isLoading = false;
       });
@@ -107,19 +120,7 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
                 const SizedBox(width: 8),
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor: Colors.white.withOpacity(0.2),
-                  child: Text(
-                    (currentUser?.displayName ?? 'U')
-                        .substring(0, 1)
-                        .toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+                _buildAppBarAvatar(),
               ],
             ),
           ),
@@ -143,6 +144,66 @@ class _HomePageState extends State<HomePage> {
         items: _navItems,
       ),
     );
+  }
+
+  Widget _buildAppBarAvatar() {
+    return CircleAvatar(
+      radius: 16,
+      backgroundColor: Colors.white.withOpacity(0.2),
+      child: ClipOval(
+        child: currentUser?.profilePhotoPath != null
+            ? Image.network(
+                currentUser!.profilePhotoPath!,
+                width: 32,
+                height: 32,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildDefaultAppBarAvatar();
+                },
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Container(
+                    width: 32,
+                    height: 32,
+                    color: Colors.white.withOpacity(0.1),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded /
+                                loadingProgress.expectedTotalBytes!
+                            : null,
+                        strokeWidth: 1,
+                        valueColor:
+                            const AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    ),
+                  );
+                },
+              )
+            : _buildDefaultAppBarAvatar(),
+      ),
+    );
+  }
+
+  Widget _buildDefaultAppBarAvatar() {
+    final initials = _getInitials(currentUser?.displayName ?? 'User');
+    return Text(
+      initials,
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+        fontSize: 12,
+      ),
+    );
+  }
+
+  String _getInitials(String name) {
+    final words = name.trim().split(' ');
+    if (words.isEmpty) return 'U';
+    if (words.length == 1) {
+      return words[0].isNotEmpty ? words[0][0].toUpperCase() : 'U';
+    }
+    return '${words[0][0].toUpperCase()}${words[1][0].toUpperCase()}';
   }
 
   String _getAppBarTitle() {

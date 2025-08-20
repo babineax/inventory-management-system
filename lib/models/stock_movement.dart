@@ -24,6 +24,26 @@ class StockMovement {
   });
 
   factory StockMovement.fromMap(Map<String, dynamic> map, String documentId) {
+    DateTime parseTimestamp(dynamic timestampValue) {
+      if (timestampValue == null) return DateTime.now();
+
+      // Handle Firestore Timestamp
+      if (timestampValue.runtimeType.toString() == 'Timestamp') {
+        return (timestampValue as dynamic).toDate();
+      }
+
+      // Handle string timestamp
+      if (timestampValue is String) {
+        try {
+          return DateTime.parse(timestampValue);
+        } catch (e) {
+          return DateTime.now();
+        }
+      }
+
+      return DateTime.now();
+    }
+
     return StockMovement(
       id: documentId,
       itemId: map['itemId'] ?? map['item_id'] ?? '',
@@ -34,11 +54,7 @@ class StockMovement {
       ),
       quantity: map['quantity'] ?? 0,
       reason: map['reason'] ?? '',
-      timestamp: map['timestamp'] != null
-          ? DateTime.parse(map['timestamp'])
-          : (map['date'] != null
-              ? DateTime.parse(map['date'])
-              : DateTime.now()),
+      timestamp: parseTimestamp(map['timestamp'] ?? map['date']),
       userId: map['userId'] ?? map['user_id'] ?? '',
       userName: map['userName'] ?? map['user_name'] ?? '',
     );
@@ -46,14 +62,14 @@ class StockMovement {
 
   Map<String, dynamic> toMap() {
     return {
-      'item_id': itemId,
-      'item_name': itemName,
+      'itemId': itemId,
+      'itemName': itemName,
       'type': type.toString().split('.').last,
       'quantity': quantity,
       'reason': reason,
-      'date': timestamp.toIso8601String(),
-      'user_id': userId,
-      'user_name': userName,
+      'timestamp': timestamp,
+      'userId': userId,
+      'userName': userName,
     };
   }
 }

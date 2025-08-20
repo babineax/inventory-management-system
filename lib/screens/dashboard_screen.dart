@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../services/inventory_service.dart';
+import '../services/auth_service.dart';
 import '../models/user_model.dart';
 import 'package:fl_chart/fl_chart.dart';
 
@@ -27,7 +28,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _loadCurrentUser();
     _loadDashboardData();
+  }
+
+  void _loadCurrentUser() {
+    // Get current user from AuthService
+    currentUser = AuthService.currentUser;
+
+    // Listen to auth state changes
+    AuthService.authStateChanges.listen((user) {
+      if (mounted) {
+        setState(() {
+          currentUser = user;
+        });
+      }
+    });
   }
 
   Future<void> _loadDashboardData() async {
@@ -62,19 +78,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           return;
         }
 
-        // If the stats show 0 items and we haven't populated synthetic data yet,
-        // populate once and then fetch stats again.
-        if (!_syntheticDataPopulated) {
-          try {
-            await InventoryService.populateWithSyntheticData();
-            _syntheticDataPopulated = true;
-          } catch (e) {
-            // populate failure - just continue, don't crash or duplicate
-            debugPrint('populateWithSyntheticData failed: $e');
-          }
-        }
-
-        // Fetch stats again (maybe synthetic data was inserted OR service was delayed)
+        // Fetch stats again (service might have been delayed)
         final updatedStats = await InventoryService.getDashboardStats();
         if (mounted) {
           setState(() {
@@ -148,36 +152,118 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Text(
-              '$greeting,',
-              style: GoogleFonts.poppins(
-                fontSize: 16,
-                color: Colors.white70,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$greeting,',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  Text(
+                    currentUser?.displayName ?? 'User',
+                    style: GoogleFonts.poppins(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
               ),
             ),
-            Text(
-              currentUser?.displayName ?? 'User',
-              style: GoogleFonts.poppins(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: Colors.white70,
-              ),
-            ),
+            const SizedBox(width: 16),
+            _buildProfileAvatar(),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildProfileAvatar() {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+      ),
+      child: ClipOval(
+        child: currentUser?.profilePhotoPath != null
+            ? Image.network(
+                currentUser!.profilePhotoPath!,
+                width: 60,
+                height: 60,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildDefaultAvatar();
+                },
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Container(
+                    width: 60,
+                    height: 60,
+                    color: Colors.white.withOpacity(0.1),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded /
+                                loadingProgress.expectedTotalBytes!
+                            : null,
+                        strokeWidth: 2,
+                        valueColor:
+                            const AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    ),
+                  );
+                },
+              )
+            : _buildDefaultAvatar(),
+      ),
+    );
+  }
+
+  Widget _buildDefaultAvatar() {
+    final initials = _getInitials(currentUser?.displayName ?? 'User');
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white.withOpacity(0.2),
+      ),
+      child: Center(
+        child: Text(
+          initials,
+          style: GoogleFonts.poppins(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getInitials(String name) {
+    final words = name.trim().split(' ');
+    if (words.isEmpty) return 'U';
+    if (words.length == 1) {
+      return words[0].isNotEmpty ? words[0][0].toUpperCase() : 'U';
+    }
+    return '${words[0][0].toUpperCase()}${words[1][0].toUpperCase()}';
   }
 
   /// Responsive statistics grid.
@@ -325,26 +411,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildMiniChart(String title, Color color) {
-    // Generate demo trend data based on card type
+    // Generate trend data based on current stats to show realistic progression
     List<double> trendData;
+    final currentValue = _getCurrentValueForChart(title);
+
+    // Create a realistic trend leading to current value
     switch (title) {
       case 'Total Items':
-        trendData = [15, 18, 22, 20, 25, 23, 25];
+        trendData = _generateTrendData(currentValue, 7, 0.8, 1.2);
         break;
       case 'Total Value':
-        trendData = [800, 950, 1100, 1050, 1250, 1200, 1250];
+        trendData = _generateTrendData(currentValue, 7, 0.7, 1.3);
         break;
       case 'Low Stock':
-        trendData = [5, 4, 6, 3, 4, 2, 3];
+        trendData = _generateTrendData(currentValue, 7, 0.5, 2.0);
         break;
       case 'Out of Stock':
-        trendData = [2, 1, 3, 2, 1, 0, 1];
+        trendData = _generateTrendData(currentValue, 7, 0.0, 3.0);
         break;
       default:
-        trendData = [10, 12, 8, 15, 11, 14, 13];
+        trendData = _generateTrendData(currentValue, 7, 0.8, 1.2);
     }
 
-    // if no space, return placeholder
+    if (trendData.isEmpty || trendData.every((element) => element == 0)) {
+      return Container(
+        height: 30,
+        alignment: Alignment.center,
+        child: Text(
+          'No trend data',
+          style: GoogleFonts.poppins(
+            fontSize: 10,
+            color: Colors.grey[500],
+          ),
+        ),
+      );
+    }
+
     return SizedBox(
       height: 30,
       child: LineChart(
@@ -373,6 +475,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
+  }
+
+  double _getCurrentValueForChart(String title) {
+    if (dashboardStats == null) return 0;
+
+    switch (title) {
+      case 'Total Items':
+        return (dashboardStats!['totalItems'] ?? 0).toDouble();
+      case 'Total Value':
+        return (dashboardStats!['totalValue'] ?? 0).toDouble();
+      case 'Low Stock':
+        return (dashboardStats!['lowStockItems'] ?? 0).toDouble();
+      case 'Out of Stock':
+        return (dashboardStats!['outOfStockItems'] ?? 0).toDouble();
+      default:
+        return 0;
+    }
+  }
+
+  List<double> _generateTrendData(
+      double currentValue, int points, double minFactor, double maxFactor) {
+    if (currentValue == 0) {
+      return List.filled(points, 0);
+    }
+
+    final random = DateTime.now().millisecondsSinceEpoch % 1000;
+    final trend = <double>[];
+
+    for (int i = 0; i < points; i++) {
+      final factor =
+          minFactor + (maxFactor - minFactor) * ((i + random) % 100) / 100.0;
+      final value = currentValue * factor;
+      trend.add(value);
+    }
+
+    // Ensure the last value matches current value
+    trend[points - 1] = currentValue;
+
+    return trend;
   }
 
   Widget _buildQuickActions() {
@@ -662,81 +803,114 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildMonthlyTrendsChart() {
-    // Demo data for monthly trends
-    final monthlyData = [
-      {'month': 'Jan', 'value': 20},
-      {'month': 'Feb', 'value': 25},
-      {'month': 'Mar', 'value': 18},
-      {'month': 'Apr', 'value': 30},
-      {'month': 'May', 'value': 22},
-      {'month': 'Jun', 'value': 28},
-    ];
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: InventoryService.getMonthlyMovementTrends(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        maxY: 35,
-        barTouchData: BarTouchData(enabled: false),
-        titlesData: FlTitlesData(
-          show: true,
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (double value, TitleMeta meta) {
-                if (value.toInt() < monthlyData.length) {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(
-                      monthlyData[value.toInt()]['month'] as String,
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'Error loading trends',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          );
+        }
+
+        final monthlyData = snapshot.data ?? [];
+
+        if (monthlyData.isEmpty) {
+          return Center(
+            child: Text(
+              'No movement data available',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          );
+        }
+
+        // Calculate max value for chart scaling
+        final maxValue = monthlyData.isEmpty
+            ? 35.0
+            : monthlyData
+                .map((data) => (data['value'] as int).toDouble())
+                .reduce((a, b) => a > b ? a : b);
+        final chartMaxY = (maxValue * 1.2).ceilToDouble();
+
+        return BarChart(
+          BarChartData(
+            alignment: BarChartAlignment.spaceAround,
+            maxY: chartMaxY > 0 ? chartMaxY : 35,
+            barTouchData: BarTouchData(enabled: false),
+            titlesData: FlTitlesData(
+              show: true,
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  getTitlesWidget: (double value, TitleMeta meta) {
+                    if (value.toInt() < monthlyData.length) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text(
+                          monthlyData[value.toInt()]['month'] as String,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      );
+                    }
+                    return const Text('');
+                  },
+                ),
+              ),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 40,
+                  getTitlesWidget: (double value, TitleMeta meta) {
+                    return Text(
+                      value.toInt().toString(),
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         color: Colors.grey[600],
                       ),
-                    ),
-                  );
-                }
-                return const Text('');
-              },
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 40,
-              getTitlesWidget: (double value, TitleMeta meta) {
-                return Text(
-                  value.toInt().toString(),
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                );
-              },
-            ),
-          ),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        ),
-        borderData: FlBorderData(show: false),
-        barGroups: monthlyData.asMap().entries.map((entry) {
-          return BarChartGroupData(
-            x: entry.key,
-            barRods: [
-              BarChartRodData(
-                toY: (entry.value['value'] as int).toDouble(),
-                color: Theme.of(context).primaryColor,
-                width: 20,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(4),
-                  topRight: Radius.circular(4),
+                    );
+                  },
                 ),
               ),
-            ],
-          );
-        }).toList(),
-      ),
+              topTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            ),
+            borderData: FlBorderData(show: false),
+            barGroups: monthlyData.asMap().entries.map((entry) {
+              return BarChartGroupData(
+                x: entry.key,
+                barRods: [
+                  BarChartRodData(
+                    toY: (entry.value['value'] as int).toDouble(),
+                    color: Theme.of(context).primaryColor,
+                    width: 20,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(4),
+                      topRight: Radius.circular(4),
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 

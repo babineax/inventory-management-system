@@ -1297,7 +1297,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
-import 'package:animations/animations.dart';
 import '../services/inventory_service.dart';
 import '../services/auth_service.dart';
 import '../models/inventory_item.dart';

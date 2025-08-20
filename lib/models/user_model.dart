@@ -22,6 +22,26 @@ class AppUser {
   });
 
   factory AppUser.fromMap(Map<String, dynamic> map, String documentId) {
+    DateTime parseTimestamp(dynamic timestampValue) {
+      if (timestampValue == null) return DateTime.now();
+
+      // Handle Firestore Timestamp
+      if (timestampValue.runtimeType.toString() == 'Timestamp') {
+        return (timestampValue as dynamic).toDate();
+      }
+
+      // Handle string timestamp
+      if (timestampValue is String) {
+        try {
+          return DateTime.parse(timestampValue);
+        } catch (e) {
+          return DateTime.now();
+        }
+      }
+
+      return DateTime.now();
+    }
+
     return AppUser(
       id: documentId,
       email: map['email'] ?? '',
@@ -30,30 +50,22 @@ class AppUser {
         (e) => e.toString().split('.').last == map['role'],
         orElse: () => UserRole.staff,
       ),
-      createdAt: map['createdAt'] != null
-          ? DateTime.parse(map['createdAt'])
-          : (map['created_at'] != null
-              ? DateTime.parse(map['created_at'])
-              : DateTime.now()),
-      lastLoginAt: map['lastLoginAt'] != null
-          ? DateTime.parse(map['lastLoginAt'])
-          : (map['last_login_at'] != null
-              ? DateTime.parse(map['last_login_at'])
-              : DateTime.now()),
+      createdAt: parseTimestamp(map['createdAt'] ?? map['created_at']),
+      lastLoginAt: parseTimestamp(map['lastLoginAt'] ?? map['last_login_at']),
       isActive: _convertToBool(map['isActive'] ?? map['is_active'] ?? true),
-      profilePhotoPath: map['profile_photo_path'],
+      profilePhotoPath: map['profilePhotoPath'] ?? map['profile_photo_path'],
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'email': email,
-      'display_name': displayName,
+      'displayName': displayName,
       'role': role.toString().split('.').last,
-      'created_at': createdAt.toIso8601String(),
-      'last_login_at': lastLoginAt.toIso8601String(),
-      'is_active': isActive ? 1 : 0,
-      'profile_photo_path': profilePhotoPath,
+      'createdAt': createdAt,
+      'lastLoginAt': lastLoginAt,
+      'isActive': isActive,
+      'profilePhotoPath': profilePhotoPath,
     };
   }
 

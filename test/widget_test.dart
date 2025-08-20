@@ -492,13 +492,13 @@ void main() {
       );
 
       final map = movement.toMap();
-      expect(map['item_id'], 'item1');
-      expect(map['item_name'], 'Test Item');
+      expect(map['itemId'], 'item1');
+      expect(map['itemName'], 'Test Item');
       expect(map['type'], 'stockOut');
       expect(map['quantity'], 3);
       expect(map['reason'], 'Sale');
-      expect(map['user_id'], 'user1');
-      expect(map['user_name'], 'Test User');
+      expect(map['userId'], 'user1');
+      expect(map['userName'], 'Test User');
     });
 
     test('StockPrediction model creation', () {

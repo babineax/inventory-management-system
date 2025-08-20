@@ -1,318 +1,372 @@
-import 'package:sqflite/sqflite.dart';
-import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/inventory_item.dart';
 import '../models/stock_movement.dart';
 import '../models/stock_prediction.dart';
 
 class InventoryService {
-  // static final _firestore = FirebaseFirestore.instance;
-  // static final _auth = FirebaseAuth.instance;
-  static Database? _db;
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  static Future<Database> get database async {
-    if (_db != null) return _db!;
+  // Collection names
+  static const String _inventoryCollection = 'inventory_items';
+  static const String _movementsCollection = 'stock_movements';
+  static const String _predictionsCollection = 'stock_predictions';
+  static const String _categoriesCollection = 'categories';
 
+  // Initialize collections with proper indexes (run once)
+  static Future<void> initializeFirestore() async {
     try {
-      _db = await _initDb();
-      // Always populate with synthetic data on first initialization
-      await populateWithSyntheticData();
-      return _db!;
+      // Create default categories if they don't exist
+      await _initializeCategories();
+      print('Firestore collections initialized successfully');
     } catch (e) {
-      print('Database initialization failed: $e');
-      // Create a minimal in-memory database as fallback
-      _db = await openDatabase(
-        ':memory:',
-        version: 1,
-        onCreate: (db, version) async {
-          await db.execute('''
-            CREATE TABLE inventory_items (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              name TEXT NOT NULL,
-              description TEXT,
-              category TEXT,
-              quantity INTEGER DEFAULT 0,
-              unitPrice REAL DEFAULT 0.0,
-              supplier TEXT,
-              createdAt TEXT,
-              updatedAt TEXT,
-              reorderLevel INTEGER DEFAULT 10,
-              imageUrl TEXT
-            )
-          ''');
-          await db.execute('''
-            CREATE TABLE stock_movements (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              item_id TEXT NOT NULL,
-              item_name TEXT,
-              type TEXT NOT NULL,
-              quantity INTEGER NOT NULL,
-              reason TEXT,
-              date TEXT NOT NULL,
-              user_id TEXT,
-              user_name TEXT
-            )
-          ''');
-          await db.execute('''
-            CREATE TABLE stock_predictions (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              item_id TEXT NOT NULL UNIQUE,
-              item_name TEXT,
-              current_quantity INTEGER,
-              average_daily_usage REAL,
-              days_left INTEGER,
-              predicted_depletion_date TEXT,
-              needs_restock INTEGER DEFAULT 0,
-              confidence TEXT,
-              calculated_at TEXT
-            )
-          ''');
-          await db.execute('''
-          CREATE TABLE users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            display_name TEXT NOT NULL,
-            role TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            last_login_at TEXT NOT NULL,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            profile_photo_path TEXT
-          )
-          ''');
-        },
-      );
-      await populateWithSyntheticData();
-      return _db!;
+      print('Error initializing Firestore: $e');
     }
   }
 
-  static Future<Database> _initDb() async {
+  // Initialize default categories
+  static Future<void> _initializeCategories() async {
     try {
-      // Store database in project root directory for easy access
-      const path = 'inventory.db';
-      final db = await openDatabase(
-        path,
-        version: 1,
-        onCreate: (db, version) async {
-          await db.execute('''
-            CREATE TABLE inventory_items (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              name TEXT NOT NULL,
-              description TEXT,
-              category TEXT,
-              quantity INTEGER DEFAULT 0,
-              unitPrice REAL DEFAULT 0.0,
-              supplier TEXT,
-              createdAt TEXT,
-              updatedAt TEXT,
-              reorderLevel INTEGER DEFAULT 10,
-              imageUrl TEXT
-            )
-          ''');
-          await db.execute('''
-            CREATE TABLE stock_movements (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              item_id TEXT NOT NULL,
-              item_name TEXT,
-              type TEXT NOT NULL,
-              quantity INTEGER NOT NULL,
-              reason TEXT,
-              date TEXT NOT NULL,
-              user_id TEXT,
-              user_name TEXT
-            )
-          ''');
-          await db.execute('''
-            CREATE TABLE stock_predictions (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              item_id TEXT NOT NULL UNIQUE,
-              item_name TEXT,
-              current_quantity INTEGER,
-              average_daily_usage REAL,
-              days_left INTEGER,
-              predicted_depletion_date TEXT,
-              needs_restock INTEGER DEFAULT 0,
-              confidence TEXT,
-              calculated_at TEXT
-            )
-          ''');
-          await db.execute('''
-          CREATE TABLE users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            display_name TEXT NOT NULL,
-            role TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            last_login_at TEXT NOT NULL,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            profile_photo_path TEXT
-          )
-          ''');
-        },
-      );
-      return db;
+      final categoriesSnapshot =
+          await _firestore.collection(_categoriesCollection).limit(1).get();
+
+      if (categoriesSnapshot.docs.isEmpty) {
+        final defaultCategories = getPredefinedCategories();
+        defaultCategories.removeLast(); // Remove "Other"
+
+        final batch = _firestore.batch();
+        for (final category in defaultCategories) {
+          final docRef = _firestore.collection(_categoriesCollection).doc();
+          batch.set(docRef, {'name': category});
+        }
+        await batch.commit();
+        print('Default categories created');
+      }
     } catch (e) {
-      print('Database initialization failed: $e');
-      rethrow;
+      print('Error initializing categories: $e');
     }
   }
-
-  static const String _inventoryTable = 'inventory_items';
-  static const String _movementsTable = 'stock_movements';
-  static const String _predictionsTable = 'stock_predictions';
 
   // Inventory Items CRUD
-  // static Future<List<InventoryItem>> getInventoryItems(
-  //     {required int offset,
-  //     required int limit,
-  //     required String searchQuery}) async {
-  //   final db = await database;
-  //   final maps = await db.query(_inventoryTable, orderBy: 'name');
-  //   return maps
-  //       .map((map) => InventoryItem.fromMap(map, map['id'].toString()))
-  //       .toList();
-  // }
-
   static Future<List<InventoryItem>> getInventoryItems({
     int offset = 0,
     int limit = 20,
     String? searchQuery,
     String? category,
   }) async {
-    final db = await database;
+    try {
+      Query query = _firestore.collection(_inventoryCollection);
 
-    String whereClause = '';
-    List<dynamic> whereArgs = [];
+      // Apply category filter
+      if (category != null && category.isNotEmpty) {
+        query = query.where('category', isEqualTo: category);
+      }
 
-    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
-      whereClause = 'WHERE name LIKE ? OR category LIKE ?';
-      whereArgs = ['%$searchQuery%', '%$searchQuery%'];
+      // Apply search filter (Firestore doesn't support full-text search natively)
+      // For production, consider using Algolia or similar for better search
+      if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+        // Simple prefix search on name field
+        final searchLower = searchQuery.toLowerCase();
+        query = query
+            .where('name', isGreaterThanOrEqualTo: searchLower)
+            .where('name', isLessThanOrEqualTo: '$searchLower\uf8ff');
+      }
+
+      // Apply pagination
+      query = query.orderBy('name').limit(limit);
+      if (offset > 0) {
+        // For proper pagination, you'd need to use startAfter with document snapshots
+        // This is a simplified version
+        final skipQuery = _firestore
+            .collection(_inventoryCollection)
+            .orderBy('name')
+            .limit(offset);
+        final skipSnapshot = await skipQuery.get();
+        if (skipSnapshot.docs.isNotEmpty) {
+          query = query.startAfterDocument(skipSnapshot.docs.last);
+        }
+      }
+
+      final snapshot = await query.get();
+      return snapshot.docs
+          .map((doc) =>
+              InventoryItem.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .toList();
+    } catch (e) {
+      print('Error getting inventory items: $e');
+      return [];
     }
-
-    final result = await db.rawQuery('''
-      SELECT * FROM inventory
-      $whereClause
-      ORDER BY name ASC
-      LIMIT ? OFFSET ?
-    ''', [...whereArgs, limit, offset]);
-
-    return result
-        .map((row) => InventoryItem.fromMap(row, row['id'].toString()))
-        .toList();
   }
 
-  static Future<int> addInventoryItem(InventoryItem item) async {
-    final db = await database;
-    final id = await db.insert(_inventoryTable, item.toMap());
-    // Log initial stock movement
-    await _logStockMovement(StockMovement(
-      id: '',
-      itemId: id.toString(),
-      itemName: item.name,
-      type: MovementType.stockIn,
-      quantity: item.quantity,
-      reason: 'Initial stock',
-      timestamp: DateTime.now(),
-      userId: '',
-      userName: 'Local',
-    ));
-    return id;
+  static Future<String> addInventoryItem(InventoryItem item) async {
+    try {
+      final docRef =
+          await _firestore.collection(_inventoryCollection).add(item.toMap());
+
+      // Log initial stock movement
+      await _logStockMovement(StockMovement(
+        id: '',
+        itemId: docRef.id,
+        itemName: item.name,
+        type: MovementType.stockIn,
+        quantity: item.quantity,
+        reason: 'Initial stock',
+        timestamp: DateTime.now(),
+        userId: _auth.currentUser?.uid ?? '',
+        userName: _auth.currentUser?.displayName ?? 'Unknown',
+      ));
+
+      return docRef.id;
+    } catch (e) {
+      print('Error adding inventory item: $e');
+      throw Exception('Failed to add inventory item: $e');
+    }
   }
 
   static Future<void> updateInventoryItem(InventoryItem item) async {
-    final db = await database;
-    await db.update(_inventoryTable, item.toMap(),
-        where: 'id = ?', whereArgs: [item.id]);
+    try {
+      await _firestore
+          .collection(_inventoryCollection)
+          .doc(item.id)
+          .update(item.toMap());
+    } catch (e) {
+      print('Error updating inventory item: $e');
+      throw Exception('Failed to update inventory item: $e');
+    }
   }
 
   static Future<void> deleteInventoryItem(String itemId) async {
-    final db = await database;
-    await db.delete(_inventoryTable, where: 'id = ?', whereArgs: [itemId]);
-    await _deleteItemMovements(itemId);
-    await _deletePrediction(itemId);
+    try {
+      // Delete the item
+      await _firestore.collection(_inventoryCollection).doc(itemId).delete();
+
+      // Delete related movements
+      await _deleteItemMovements(itemId);
+
+      // Delete prediction
+      await _deletePrediction(itemId);
+    } catch (e) {
+      print('Error deleting inventory item: $e');
+      throw Exception('Failed to delete inventory item: $e');
+    }
   }
 
   static Future<void> adjustStock(
       String itemId, int newQuantity, String reason) async {
-    final db = await database;
-    final maps =
-        await db.query(_inventoryTable, where: 'id = ?', whereArgs: [itemId]);
-    if (maps.isEmpty) throw Exception('Item not found');
-    final currentItem = InventoryItem.fromMap(maps.first, itemId);
-    final difference = newQuantity - currentItem.quantity;
-    await db.update(_inventoryTable, {'quantity': newQuantity},
-        where: 'id = ?', whereArgs: [itemId]);
-    if (difference != 0) {
-      await _logStockMovement(StockMovement(
-        id: '',
-        itemId: itemId,
-        itemName: currentItem.name,
-        type: difference > 0 ? MovementType.stockIn : MovementType.stockOut,
-        quantity: difference.abs(),
-        reason: reason,
-        timestamp: DateTime.now(),
-        userId: '',
-        userName: 'Local',
-      ));
+    try {
+      final itemDoc =
+          await _firestore.collection(_inventoryCollection).doc(itemId).get();
+      if (!itemDoc.exists) throw Exception('Item not found');
+
+      final currentItem = InventoryItem.fromMap(itemDoc.data()!, itemId);
+      final difference = newQuantity - currentItem.quantity;
+
+      // Update quantity
+      await _firestore.collection(_inventoryCollection).doc(itemId).update({
+        'quantity': newQuantity,
+        'updatedAt': DateTime.now().toIso8601String(),
+      });
+
+      // Log movement if there's a difference
+      if (difference != 0) {
+        await _logStockMovement(StockMovement(
+          id: '',
+          itemId: itemId,
+          itemName: currentItem.name,
+          type: difference > 0 ? MovementType.stockIn : MovementType.stockOut,
+          quantity: difference.abs(),
+          reason: reason,
+          timestamp: DateTime.now(),
+          userId: _auth.currentUser?.uid ?? '',
+          userName: _auth.currentUser?.displayName ?? 'Unknown',
+        ));
+      }
+
+      // Recalculate prediction
+      await _recalculatePrediction(itemId);
+    } catch (e) {
+      print('Error adjusting stock: $e');
+      throw Exception('Failed to adjust stock: $e');
     }
-    await _recalculatePrediction(itemId);
   }
 
   // Stock Movements
-  static Future<List<StockMovement>> getStockMovements(
-      {String? itemId, int limit = 100}) async {
-    final db = await database;
-    List<Map<String, dynamic>> maps;
-    if (itemId != null) {
-      maps = await db.query(_movementsTable,
-          where: 'item_id = ?',
-          whereArgs: [itemId],
-          orderBy: 'date DESC',
-          limit: limit);
-    } else {
-      maps =
-          await db.query(_movementsTable, orderBy: 'date DESC', limit: limit);
+  static Future<List<StockMovement>> getStockMovements({
+    String? itemId,
+    int limit = 100,
+  }) async {
+    try {
+      Query query = _firestore.collection(_movementsCollection);
+
+      if (itemId != null) {
+        query = query.where('itemId', isEqualTo: itemId);
+      }
+
+      query = query.orderBy('timestamp', descending: true).limit(limit);
+
+      final snapshot = await query.get();
+      return snapshot.docs
+          .map((doc) =>
+              StockMovement.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .toList();
+    } catch (e) {
+      print('Error getting stock movements: $e');
+      return [];
     }
-    return maps
-        .map((map) => StockMovement.fromMap(map, map['id'].toString()))
-        .toList();
+  }
+
+  // Get monthly stock movement trends for dashboard
+  static Future<List<Map<String, dynamic>>> getMonthlyMovementTrends({
+    int monthsBack = 6,
+  }) async {
+    try {
+      final startDate =
+          DateTime.now().subtract(Duration(days: monthsBack * 30));
+
+      final snapshot = await _firestore
+          .collection(_movementsCollection)
+          .where('timestamp', isGreaterThan: Timestamp.fromDate(startDate))
+          .orderBy('timestamp')
+          .get();
+
+      final movements = snapshot.docs
+          .map((doc) => StockMovement.fromMap(doc.data(), doc.id))
+          .toList();
+
+      // Group movements by month
+      final monthlyData = <String, Map<String, int>>{};
+
+      for (final movement in movements) {
+        final monthKey =
+            '${movement.timestamp.year}-${movement.timestamp.month.toString().padLeft(2, '0')}';
+        final monthName = _getMonthName(movement.timestamp.month);
+
+        if (!monthlyData.containsKey(monthKey)) {
+          monthlyData[monthKey] = {
+            'stockIn': 0,
+            'stockOut': 0,
+            'total': 0,
+          };
+        }
+
+        if (movement.type == MovementType.stockIn) {
+          monthlyData[monthKey]!['stockIn'] =
+              monthlyData[monthKey]!['stockIn']! + movement.quantity;
+        } else if (movement.type == MovementType.stockOut) {
+          monthlyData[monthKey]!['stockOut'] =
+              monthlyData[monthKey]!['stockOut']! + movement.quantity;
+        }
+
+        monthlyData[monthKey]!['total'] =
+            monthlyData[monthKey]!['total']! + movement.quantity;
+      }
+
+      // Convert to list and sort by date
+      final sortedData = monthlyData.entries.toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
+
+      // Return the last 6 months of data
+      return sortedData.take(monthsBack).map((entry) {
+        final monthKey = entry.key;
+        final year = int.parse(monthKey.split('-')[0]);
+        final month = int.parse(monthKey.split('-')[1]);
+        final monthName = _getMonthName(month);
+
+        return {
+          'month': monthName,
+          'value': entry.value['total'],
+          'stockIn': entry.value['stockIn'],
+          'stockOut': entry.value['stockOut'],
+        };
+      }).toList();
+    } catch (e) {
+      print('Error getting monthly movement trends: $e');
+      return [];
+    }
+  }
+
+  static String _getMonthName(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    return months[month - 1];
   }
 
   static Future<void> _logStockMovement(StockMovement movement) async {
-    final db = await database;
-    await db.insert(_movementsTable, movement.toMap());
+    try {
+      await _firestore.collection(_movementsCollection).add(movement.toMap());
+    } catch (e) {
+      print('Error logging stock movement: $e');
+    }
   }
 
   // Stock Predictions
   static Future<List<StockPrediction>> getStockPredictions() async {
-    final db = await database;
-    final maps = await db.query(_predictionsTable,
-        where: 'needs_restock = ?', whereArgs: [1], orderBy: 'days_left');
-    return maps.map((map) => StockPrediction.fromMap(map)).toList();
+    try {
+      final snapshot = await _firestore
+          .collection(_predictionsCollection)
+          .where('needsRestock', isEqualTo: true)
+          .orderBy('daysLeft')
+          .get();
+
+      return snapshot.docs
+          .map((doc) => StockPrediction.fromMap(doc.data()))
+          .toList();
+    } catch (e) {
+      print('Error getting stock predictions: $e');
+      return [];
+    }
   }
 
   static Future<StockPrediction?> getItemPrediction(String itemId) async {
-    final db = await database;
-    final maps = await db
-        .query(_predictionsTable, where: 'item_id = ?', whereArgs: [itemId]);
-    if (maps.isEmpty) return null;
-    return StockPrediction.fromMap(maps.first);
+    try {
+      final snapshot = await _firestore
+          .collection(_predictionsCollection)
+          .where('itemId', isEqualTo: itemId)
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        return StockPrediction.fromMap(snapshot.docs.first.data());
+      }
+      return null;
+    } catch (e) {
+      print('Error getting item prediction: $e');
+      return null;
+    }
   }
 
   static Future<void> _recalculatePrediction(String itemId) async {
     try {
-      final db = await database;
-      final itemMaps =
-          await db.query(_inventoryTable, where: 'id = ?', whereArgs: [itemId]);
-      if (itemMaps.isEmpty) return;
-      final item = InventoryItem.fromMap(itemMaps.first, itemId);
+      // Get item details
+      final itemDoc =
+          await _firestore.collection(_inventoryCollection).doc(itemId).get();
+      if (!itemDoc.exists) return;
+
+      final item = InventoryItem.fromMap(itemDoc.data()!, itemId);
+
+      // Get movements from last 30 days
       final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
-      final movementMaps = await db.query(
-        _movementsTable,
-        where: 'item_id = ? AND date > ?',
-        whereArgs: [itemId, thirtyDaysAgo.toIso8601String()],
-        orderBy: 'date DESC',
-      );
-      if (movementMaps.isEmpty) {
+      final movementsSnapshot = await _firestore
+          .collection(_movementsCollection)
+          .where('itemId', isEqualTo: itemId)
+          .where('timestamp', isGreaterThan: Timestamp.fromDate(thirtyDaysAgo))
+          .orderBy('timestamp', descending: true)
+          .get();
+
+      if (movementsSnapshot.docs.isEmpty) {
         await _savePrediction(StockPrediction(
           itemId: itemId,
           itemName: item.name,
@@ -326,11 +380,14 @@ class InventoryService {
         ));
         return;
       }
+
+      // Calculate daily usage
       double totalUsage = 0;
       int usageDays = 0;
-      final movements = movementMaps
-          .map((map) => StockMovement.fromMap(map, map['id'].toString()))
+      final movements = movementsSnapshot.docs
+          .map((doc) => StockMovement.fromMap(doc.data(), doc.id))
           .toList();
+
       final dailyUsage = <String, int>{};
       for (final movement in movements) {
         if (movement.type == MovementType.stockOut) {
@@ -338,16 +395,19 @@ class InventoryService {
           dailyUsage[dateKey] = (dailyUsage[dateKey] ?? 0) + movement.quantity;
         }
       }
+
       if (dailyUsage.isNotEmpty) {
         final totalUsageInt = dailyUsage.values.reduce((a, b) => a + b);
         totalUsage = totalUsageInt.toDouble();
         usageDays = dailyUsage.length;
       }
+
       final averageDailyUsage = usageDays > 0 ? totalUsage / usageDays : 0.0;
       final daysLeft = averageDailyUsage > 0
           ? (item.quantity.toDouble() / averageDailyUsage).ceil()
           : 999;
       final predictedDate = DateTime.now().add(Duration(days: daysLeft));
+
       PredictionConfidence confidence;
       if (usageDays >= 14) {
         confidence = PredictionConfidence.high;
@@ -356,6 +416,7 @@ class InventoryService {
       } else {
         confidence = PredictionConfidence.low;
       }
+
       await _savePrediction(StockPrediction(
         itemId: itemId,
         itemName: item.name,
@@ -368,95 +429,132 @@ class InventoryService {
         calculatedAt: DateTime.now(),
       ));
     } catch (e) {
-      // For production, log error to server instead of printing
       print('Error calculating prediction for item $itemId: $e');
     }
   }
 
   static Future<void> _savePrediction(StockPrediction prediction) async {
-    final db = await database;
-    final maps = await db.query(_predictionsTable,
-        where: 'item_id = ?', whereArgs: [prediction.itemId]);
-    if (maps.isEmpty) {
-      await db.insert(_predictionsTable, prediction.toMap());
-    } else {
-      await db.update(_predictionsTable, prediction.toMap(),
-          where: 'item_id = ?', whereArgs: [prediction.itemId]);
+    try {
+      // Check if prediction exists
+      final existingSnapshot = await _firestore
+          .collection(_predictionsCollection)
+          .where('itemId', isEqualTo: prediction.itemId)
+          .limit(1)
+          .get();
+
+      if (existingSnapshot.docs.isNotEmpty) {
+        // Update existing prediction
+        await _firestore
+            .collection(_predictionsCollection)
+            .doc(existingSnapshot.docs.first.id)
+            .update(prediction.toMap());
+      } else {
+        // Create new prediction
+        await _firestore
+            .collection(_predictionsCollection)
+            .add(prediction.toMap());
+      }
+    } catch (e) {
+      print('Error saving prediction: $e');
     }
   }
 
   // Helper methods
   static Future<void> _deleteItemMovements(String itemId) async {
-    final db = await database;
-    await db.delete(_movementsTable, where: 'item_id = ?', whereArgs: [itemId]);
+    try {
+      final snapshot = await _firestore
+          .collection(_movementsCollection)
+          .where('itemId', isEqualTo: itemId)
+          .get();
+
+      final batch = _firestore.batch();
+      for (final doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    } catch (e) {
+      print('Error deleting item movements: $e');
+    }
   }
 
   static Future<void> _deletePrediction(String itemId) async {
-    final db = await database;
-    await db
-        .delete(_predictionsTable, where: 'item_id = ?', whereArgs: [itemId]);
+    try {
+      final snapshot = await _firestore
+          .collection(_predictionsCollection)
+          .where('itemId', isEqualTo: itemId)
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        await _firestore
+            .collection(_predictionsCollection)
+            .doc(snapshot.docs.first.id)
+            .delete();
+      }
+    } catch (e) {
+      print('Error deleting prediction: $e');
+    }
   }
 
   // Dashboard statistics
   static Future<Map<String, dynamic>> getDashboardStats() async {
-    final db = await database;
-    final itemsMaps = await db.query(_inventoryTable);
-    final items = itemsMaps
-        .map((map) => InventoryItem.fromMap(map, map['id'].toString()))
-        .toList();
-    final totalItems = items.length;
-    final totalValue = items.fold<double>(
-        0, (sum, item) => sum + (item.quantity * item.unitPrice));
-    final lowStockItems =
-        items.where((item) => item.quantity <= item.reorderLevel).length;
-    final outOfStockItems = items.where((item) => item.quantity == 0).length;
-    final predictionsMaps = await db
-        .query(_predictionsTable, where: 'needs_restock = ?', whereArgs: [1]);
-    return {
-      'totalItems': totalItems,
-      'totalValue': totalValue,
-      'lowStockItems': lowStockItems,
-      'outOfStockItems': outOfStockItems,
-      'itemsNeedingRestock': predictionsMaps.length,
-    };
+    try {
+      final itemsSnapshot =
+          await _firestore.collection(_inventoryCollection).get();
+      final items = itemsSnapshot.docs
+          .map((doc) => InventoryItem.fromMap(doc.data(), doc.id))
+          .toList();
+
+      final totalItems = items.length;
+      final totalValue = items.fold<double>(
+          0, (sum, item) => sum + (item.quantity * item.unitPrice));
+      final lowStockItems =
+          items.where((item) => item.quantity <= item.reorderLevel).length;
+      final outOfStockItems = items.where((item) => item.quantity == 0).length;
+
+      final predictionsSnapshot = await _firestore
+          .collection(_predictionsCollection)
+          .where('needsRestock', isEqualTo: true)
+          .get();
+
+      return {
+        'totalItems': totalItems,
+        'totalValue': totalValue,
+        'lowStockItems': lowStockItems,
+        'outOfStockItems': outOfStockItems,
+        'itemsNeedingRestock': predictionsSnapshot.docs.length,
+      };
+    } catch (e) {
+      print('Error getting dashboard stats: $e');
+      return {
+        'totalItems': 0,
+        'totalValue': 0.0,
+        'lowStockItems': 0,
+        'outOfStockItems': 0,
+        'itemsNeedingRestock': 0,
+      };
+    }
   }
 
   // Categories
-  // static Future<List<String>> getCategories() async {
-  //   final db = await database;
-  //   final maps = await db.query(_inventoryTable, columns: ['category']);
-  //   final categories = maps
-  //       .map((map) => map['category'] as String? ?? '')
-  //       .where((c) => c.isNotEmpty)
-  //       .toSet()
-  //       .toList();
-  //   categories.sort();
-  //   return categories;
-  // }
-
   static Future<List<String>> getCategories() async {
-    final db = await database;
+    try {
+      final snapshot = await _firestore
+          .collection(_categoriesCollection)
+          .orderBy('name')
+          .get();
 
-    // Get categories
-    final result = await db.query('categories', orderBy: 'name ASC');
-
-    if (result.isEmpty) {
-      // Default categories
-      final defaults = [
-        'Electronics',
-        'Furniture',
-        'Office Supplies',
-        'Groceries',
-        'Clothing'
-      ];
-      for (final cat in defaults) {
-        await db.insert('categories', {'name': cat});
+      if (snapshot.docs.isEmpty) {
+        // Initialize default categories
+        await _initializeCategories();
+        return getPredefinedCategories();
       }
-      // Re-query after insert
-      return defaults;
-    }
 
-    return result.map((row) => row['name'] as String).toList();
+      return snapshot.docs.map((doc) => doc.data()['name'] as String).toList();
+    } catch (e) {
+      print('Error getting categories: $e');
+      return getPredefinedCategories();
+    }
   }
 
   // Predefined categories with "Other" option
@@ -519,250 +617,5 @@ class InventoryService {
     // TODO: Implement actual email sending using a service.
     // Example implementation:
     // await EmailService.sendLowStockAlert(lowStockItems);
-  }
-
-  // Synthetic data population for testing
-  static Future<void> populateWithSyntheticData() async {
-    try {
-      final db = await database;
-
-      // Check if data already exists
-      final existingItems = await db.query(_inventoryTable, limit: 1);
-      if (existingItems.isNotEmpty) {
-        print(
-            'Database already contains data. Skipping synthetic data population.');
-        return;
-      }
-
-      print('Populating database with synthetic data...');
-
-      final random = Random();
-      final categories = getPredefinedCategories();
-      categories.removeLast(); // Remove "Other" for synthetic data
-
-      final sampleItems = [
-        // Electronics
-        {
-          'name': 'Wireless Mouse',
-          'category': 'Electronics',
-          'supplier': 'TechCorp',
-          'price': 25.99
-        },
-        {
-          'name': 'USB-C Cable',
-          'category': 'Electronics',
-          'supplier': 'TechCorp',
-          'price': 12.50
-        },
-        {
-          'name': 'Bluetooth Headphones',
-          'category': 'Electronics',
-          'supplier': 'AudioMax',
-          'price': 89.99
-        },
-        {
-          'name': 'Laptop Stand',
-          'category': 'Electronics',
-          'supplier': 'ErgoTech',
-          'price': 45.00
-        },
-        {
-          'name': 'Power Bank',
-          'category': 'Electronics',
-          'supplier': 'PowerPlus',
-          'price': 35.75
-        },
-
-        // Office Supplies
-        {
-          'name': 'A4 Paper Ream',
-          'category': 'Office Supplies',
-          'supplier': 'PaperCo',
-          'price': 8.99
-        },
-        {
-          'name': 'Blue Ink Pens (Pack of 10)',
-          'category': 'Office Supplies',
-          'supplier': 'WriteMate',
-          'price': 5.50
-        },
-        {
-          'name': 'Sticky Notes',
-          'category': 'Office Supplies',
-          'supplier': 'NotePad Inc',
-          'price': 3.25
-        },
-        {
-          'name': 'Stapler',
-          'category': 'Office Supplies',
-          'supplier': 'OfficeMax',
-          'price': 15.99
-        },
-        {
-          'name': 'File Folders (Pack of 25)',
-          'category': 'Office Supplies',
-          'supplier': 'OrganizePro',
-          'price': 12.75
-        },
-
-        // Food & Beverages
-        {
-          'name': 'Coffee Beans (1kg)',
-          'category': 'Food & Beverages',
-          'supplier': 'BrewMaster',
-          'price': 24.99
-        },
-        {
-          'name': 'Green Tea Bags (100ct)',
-          'category': 'Food & Beverages',
-          'supplier': 'TeaTime',
-          'price': 18.50
-        },
-        {
-          'name': 'Bottled Water (24 pack)',
-          'category': 'Food & Beverages',
-          'supplier': 'PureWater',
-          'price': 6.99
-        },
-        {
-          'name': 'Energy Bars (12 pack)',
-          'category': 'Food & Beverages',
-          'supplier': 'HealthySnacks',
-          'price': 19.99
-        },
-
-        // Tools & Equipment
-        {
-          'name': 'Screwdriver Set',
-          'category': 'Tools & Equipment',
-          'supplier': 'ToolMaster',
-          'price': 29.99
-        },
-        {
-          'name': 'Measuring Tape',
-          'category': 'Tools & Equipment',
-          'supplier': 'PrecisionTools',
-          'price': 12.99
-        },
-        {
-          'name': 'Safety Goggles',
-          'category': 'Tools & Equipment',
-          'supplier': 'SafetyFirst',
-          'price': 8.75
-        },
-        {
-          'name': 'Work Gloves (Pair)',
-          'category': 'Tools & Equipment',
-          'supplier': 'ProtectPro',
-          'price': 6.50
-        },
-
-        // Medical Supplies
-        {
-          'name': 'First Aid Kit',
-          'category': 'Medical Supplies',
-          'supplier': 'MedSupply',
-          'price': 45.99
-        },
-        {
-          'name': 'Disposable Masks (50 pack)',
-          'category': 'Medical Supplies',
-          'supplier': 'HealthGuard',
-          'price': 15.99
-        },
-        {
-          'name': 'Hand Sanitizer (500ml)',
-          'category': 'Medical Supplies',
-          'supplier': 'CleanHands',
-          'price': 7.99
-        },
-
-        // Cleaning Supplies
-        {
-          'name': 'All-Purpose Cleaner',
-          'category': 'Cleaning Supplies',
-          'supplier': 'CleanPro',
-          'price': 4.99
-        },
-        {
-          'name': 'Microfiber Cloths (10 pack)',
-          'category': 'Cleaning Supplies',
-          'supplier': 'WipeClean',
-          'price': 12.99
-        },
-        {
-          'name': 'Trash Bags (50 count)',
-          'category': 'Cleaning Supplies',
-          'supplier': 'WasteMgmt',
-          'price': 8.50
-        },
-      ];
-
-      for (int i = 0; i < sampleItems.length; i++) {
-        final itemData = sampleItems[i];
-        final quantity = random.nextInt(100) + 1; // 1-100
-        final reorderLevel = [5, 10, 15, 20, 25][random.nextInt(5)];
-
-        final item = InventoryItem(
-          id: '',
-          name: itemData['name'] as String,
-          description: 'High-quality ${itemData['name']} for professional use',
-          category: itemData['category'] as String,
-          quantity: quantity,
-          unitPrice: itemData['price'] as double,
-          supplier: itemData['supplier'] as String,
-          createdAt:
-              DateTime.now().subtract(Duration(days: random.nextInt(30))),
-          updatedAt: DateTime.now(),
-          reorderLevel: reorderLevel,
-        );
-
-        final itemId = await addInventoryItem(item);
-
-        // Add some random stock movements for realistic data
-        final movementCount = random.nextInt(5) + 1;
-        for (int j = 0; j < movementCount; j++) {
-          final isStockOut = random.nextBool();
-          final movementQuantity = random.nextInt(10) + 1;
-          final daysAgo = random.nextInt(30);
-
-          await _logStockMovement(StockMovement(
-            id: '',
-            itemId: itemId.toString(),
-            itemName: item.name,
-            type: isStockOut ? MovementType.stockOut : MovementType.stockIn,
-            quantity: movementQuantity,
-            reason: isStockOut
-                ? ['Sale', 'Usage', 'Damaged', 'Return'][random.nextInt(4)]
-                : [
-                    'Purchase',
-                    'Return',
-                    'Adjustment',
-                    'Transfer'
-                  ][random.nextInt(4)],
-            timestamp: DateTime.now().subtract(Duration(days: daysAgo)),
-            userId: 'user_${random.nextInt(5) + 1}',
-            userName: [
-              'John Doe',
-              'Jane Smith',
-              'Mike Johnson',
-              'Sarah Wilson',
-              'Admin'
-            ][random.nextInt(5)],
-          ));
-        }
-
-        // Calculate predictions for each item
-        await _recalculatePrediction(itemId.toString());
-      }
-
-      print(
-          'Successfully populated database with ${sampleItems.length} items and their movement history');
-
-      // Check for low stock items and send alerts
-      await checkLowStockAndSendAlerts();
-    } catch (e) {
-      print('Error populating synthetic data: $e');
-    }
   }
 }

@@ -419,11 +419,23 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
         break;
     }
 
-    double stockPercent = prediction.daysLeft <= 0
-        ? 0.0
-        : prediction.daysLeft >= 30
-            ? 1.0
-            : prediction.daysLeft / 30.0;
+    // Calculate progress based on current quantity vs reorder level and usage pattern
+    double stockPercent;
+    if (prediction.currentQuantity <= 0) {
+      stockPercent = 0.0;
+    } else if (prediction.daysLeft <= 0) {
+      stockPercent = 0.0;
+    } else if (prediction.daysLeft <= 3) {
+      stockPercent = 0.1; // Critical level
+    } else if (prediction.daysLeft <= 7) {
+      stockPercent = 0.3; // Urgent level
+    } else if (prediction.daysLeft <= 14) {
+      stockPercent = 0.6; // Moderate level
+    } else if (prediction.daysLeft <= 30) {
+      stockPercent = 0.8; // Good level
+    } else {
+      stockPercent = 1.0; // Excellent level
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),

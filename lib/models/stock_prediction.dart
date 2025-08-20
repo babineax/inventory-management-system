@@ -22,6 +22,26 @@ class StockPrediction {
   });
 
   factory StockPrediction.fromMap(Map<String, dynamic> map) {
+    DateTime parseTimestamp(dynamic timestampValue) {
+      if (timestampValue == null) return DateTime.now();
+
+      // Handle Firestore Timestamp
+      if (timestampValue.runtimeType.toString() == 'Timestamp') {
+        return (timestampValue as dynamic).toDate();
+      }
+
+      // Handle string timestamp
+      if (timestampValue is String) {
+        try {
+          return DateTime.parse(timestampValue);
+        } catch (e) {
+          return DateTime.now();
+        }
+      }
+
+      return DateTime.now();
+    }
+
     return StockPrediction(
       itemId: map['itemId'] ?? map['item_id'] ?? '',
       itemName: map['itemName'] ?? map['item_name'] ?? '',
@@ -30,35 +50,28 @@ class StockPrediction {
           (map['averageDailyUsage'] ?? map['average_daily_usage'] ?? 0.0)
               .toDouble(),
       daysLeft: map['daysLeft'] ?? map['days_left'] ?? 0,
-      predictedDepletionDate: map['predictedDepletionDate'] != null
-          ? DateTime.parse(map['predictedDepletionDate'])
-          : (map['predicted_depletion_date'] != null
-              ? DateTime.parse(map['predicted_depletion_date'])
-              : DateTime.now()),
-      needsRestock: (map['needsRestock'] ?? map['needs_restock'] ?? 0) == 1,
+      predictedDepletionDate: parseTimestamp(
+          map['predictedDepletionDate'] ?? map['predicted_depletion_date']),
+      needsRestock: map['needsRestock'] ?? map['needs_restock'] ?? false,
       confidence: PredictionConfidence.values.firstWhere(
         (e) => e.toString().split('.').last == map['confidence'],
         orElse: () => PredictionConfidence.low,
       ),
-      calculatedAt: map['calculatedAt'] != null
-          ? DateTime.parse(map['calculatedAt'])
-          : (map['calculated_at'] != null
-              ? DateTime.parse(map['calculated_at'])
-              : DateTime.now()),
+      calculatedAt: parseTimestamp(map['calculatedAt'] ?? map['calculated_at']),
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'item_id': itemId,
-      'item_name': itemName,
-      'current_quantity': currentQuantity,
-      'average_daily_usage': averageDailyUsage,
-      'days_left': daysLeft,
-      'predicted_depletion_date': predictedDepletionDate.toIso8601String(),
-      'needs_restock': needsRestock ? 1 : 0,
+      'itemId': itemId,
+      'itemName': itemName,
+      'currentQuantity': currentQuantity,
+      'averageDailyUsage': averageDailyUsage,
+      'daysLeft': daysLeft,
+      'predictedDepletionDate': predictedDepletionDate,
+      'needsRestock': needsRestock,
       'confidence': confidence.toString().split('.').last,
-      'calculated_at': calculatedAt.toIso8601String(),
+      'calculatedAt': calculatedAt,
     };
   }
 

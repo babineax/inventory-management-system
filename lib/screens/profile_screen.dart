@@ -473,11 +473,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Profile update not available in SQLite mode')),
-    );
+    try {
+      Navigator.pop(context);
+
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Updating profile...')),
+      );
+
+      // Update profile using Firebase AuthService
+      await AuthService.updateUserProfile(displayName: newName.trim());
+
+      // Refresh the current user data
+      setState(() {
+        currentUser = AuthService.currentUser;
+      });
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile updated successfully!')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating profile: $e')),
+      );
+    }
   }
 
   void _showChangePasswordDialog() {
@@ -502,11 +523,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _sendPasswordResetEmail() async {
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Password reset not available in SQLite mode')),
-    );
+    try {
+      Navigator.pop(context);
+
+      if (currentUser?.email == null || currentUser!.email.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No email address found')),
+        );
+        return;
+      }
+
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sending password reset email...')),
+      );
+
+      // Send password reset email using Firebase AuthService
+      await AuthService.resetPassword(currentUser!.email);
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Password reset email sent to ${currentUser!.email}'),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending reset email: $e')),
+      );
+    }
   }
 
   void _showManageUsersDialog() {
@@ -519,7 +566,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           height: 200,
           child: Center(
             child: Text(
-              'User management is not available in SQLite mode.\nThis feature requires Firebase integration.',
+              'User management feature is coming soon.\nThis will allow you to view and manage all user accounts.',
               textAlign: TextAlign.center,
             ),
           ),
@@ -535,10 +582,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _handleUserAction(String action, AppUser user) async {
-    // User management not available in SQLite mode
+    // User management feature coming soon
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('User management not available in SQLite mode')),
+      const SnackBar(content: Text('User management feature coming soon')),
     );
   }
 
