@@ -220,7 +220,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-For support, email support@example.com or create an issue in the GitHub repository.
+For support, email admin@stocksense.com or create an issue in the GitHub repository.
 
 ## Roadmap
 
@@ -230,7 +230,3 @@ For support, email support@example.com or create an issue in the GitHub reposito
 - [ ] Advanced reporting and analytics
 - [ ] Integration with external inventory systems
 - [ ] Offline mode improvements
-
----
-
-Built with ❤️ using Flutter and Firebase
