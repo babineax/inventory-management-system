@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow authenticated users to read and write all inventory data
+    match /inventory_items/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Allow authenticated users to read and write stock movements
+    match /stock_movements/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Allow authenticated users to read and write stock predictions
+    match /stock_predictions/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Allow authenticated users to read categories
+    match /categories/{document} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // User documents - users can read/write their own data, admins can read all
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Allow authenticated users to read and write image uploads
+    match /images/{document} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
