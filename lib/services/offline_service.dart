@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/inventory_item.dart';
@@ -60,7 +59,6 @@ class OfflineService {
       final itemsJson = jsonDecode(itemsString) as List;
       return itemsJson.map((json) => InventoryItem.fromJson(json)).toList();
     } catch (e) {
-      debugPrint('Error loading offline inventory: $e');
       return [];
     }
   }
@@ -84,7 +82,6 @@ class OfflineService {
       final usersJson = jsonDecode(usersString) as List;
       return usersJson.map((json) => AppUser.fromJson(json)).toList();
     } catch (e) {
-      debugPrint('Error loading offline users: $e');
       return [];
     }
   }
@@ -110,7 +107,6 @@ class OfflineService {
     try {
       return List<Map<String, dynamic>>.from(jsonDecode(pendingChangesString));
     } catch (e) {
-      debugPrint('Error loading pending changes: $e');
       return [];
     }
   }
@@ -128,19 +124,15 @@ class OfflineService {
     final pendingChanges = await getPendingChanges();
     if (pendingChanges.isEmpty) return;
 
-    debugPrint('Syncing ${pendingChanges.length} pending changes...');
-
     for (final change in pendingChanges) {
       try {
         await _processPendingChange(change);
       } catch (e) {
-        debugPrint('Error syncing change: $e');
         // Continue with other changes even if one fails
       }
     }
 
     await clearPendingChanges();
-    debugPrint('Sync completed successfully');
   }
 
   // Process individual pending change
@@ -171,9 +163,7 @@ class OfflineService {
             role: user.role,
             isActive: user.isActive,
           );
-          debugPrint('User update synced: ${user.id}');
         } catch (e) {
-          debugPrint('Failed to sync user update: $e');
           rethrow;
         }
         break;
@@ -181,14 +171,11 @@ class OfflineService {
         final userId = data['id'] as String;
         try {
           await AuthService.deleteUser(userId);
-          debugPrint('User delete synced: $userId');
         } catch (e) {
-          debugPrint('Failed to sync user delete: $e');
           rethrow;
         }
         break;
       default:
-        debugPrint('Unknown change type: $type');
     }
   }
 
@@ -279,10 +266,7 @@ class OfflineService {
       // Then fetch fresh data from server
       final freshInventory = await InventoryService.getInventoryItems();
       await saveInventoryOffline(freshInventory);
-
-      debugPrint('Force sync completed successfully');
     } catch (e) {
-      debugPrint('Force sync failed: $e');
       rethrow;
     }
   }
@@ -295,7 +279,5 @@ class OfflineService {
     await _prefs!.remove(_usersKey);
     await _prefs!.remove(_pendingChangesKey);
     await _prefs!.remove(_lastSyncKey);
-
-    debugPrint('All offline data cleared');
   }
 }

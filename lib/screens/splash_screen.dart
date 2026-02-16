@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'auth/widget_tree.dart';
+import 'landing_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -82,7 +82,7 @@ class _SplashScreenState extends State<SplashScreen>
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (context, animation, secondaryAnimation) =>
-                const WidgetTree(),
+                const LandingScreen(),
             transitionsBuilder:
                 (context, animation, secondaryAnimation, child) {
               // Professional slide and fade transition
@@ -133,7 +133,7 @@ class _SplashScreenState extends State<SplashScreen>
             end: Alignment.bottomCenter,
             colors: [
               theme.primaryColor,
-              theme.primaryColor.withOpacity(0.8),
+              theme.primaryColor.withValues(alpha: 0.8),
             ],
           ),
         ),
@@ -153,11 +153,11 @@ class _SplashScreenState extends State<SplashScreen>
                         width: 120,
                         height: 120,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.white.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
+                              color: Colors.black.withValues(alpha: 0.2),
                               blurRadius: 20,
                               spreadRadius: 2,
                               offset: const Offset(0, 8),
@@ -208,7 +208,7 @@ class _SplashScreenState extends State<SplashScreen>
                               letterSpacing: 1.2,
                               shadows: [
                                 Shadow(
-                                  color: Colors.black.withOpacity(0.3),
+                                  color: Colors.black.withValues(alpha: 0.3),
                                   blurRadius: 8,
                                   offset: const Offset(0, 4),
                                 ),
@@ -221,10 +221,19 @@ class _SplashScreenState extends State<SplashScreen>
                             style: GoogleFonts.poppins(
                               fontSize: 16,
                               fontWeight: FontWeight.w400,
-                              color: Colors.white.withOpacity(0.9),
+                              color: Colors.white.withValues(alpha: 0.9),
                               letterSpacing: 0.5,
                             ),
                           ),
+                          // const SizedBox(height: 4),
+                          // Text(
+                          //   'v3.2.1 (Build: 2025-11-29-22:00)',
+                          //   style: GoogleFonts.poppins(
+                          //     fontSize: 10,
+                          //     fontWeight: FontWeight.w300,
+                          //     color: Colors.white.withValues(alpha: 0.6),
+                          //   ),
+                          // ),
                         ],
                       ),
                     ),
@@ -246,7 +255,7 @@ class _SplashScreenState extends State<SplashScreen>
                       child: CircularProgressIndicator(
                         strokeWidth: 3,
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.white.withOpacity(0.8),
+                          Colors.white.withValues(alpha: 0.8),
                         ),
                       ),
                     ),

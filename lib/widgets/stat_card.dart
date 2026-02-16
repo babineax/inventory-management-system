@@ -25,14 +25,45 @@ class StatCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // Adjust font sizes based on card size
-          double valueFontSize = constraints.maxHeight > 120 ? 20 : 16;
-          double titleFontSize = constraints.maxHeight > 120 ? 12 : 10;
-          double iconSize = constraints.maxHeight > 120 ? 24 : 20;
-          double smallIconSize = constraints.maxHeight > 120 ? 16 : 14;
+          // More responsive breakpoints based on card height
+          double valueFontSize;
+          double titleFontSize;
+          double iconSize;
+          double smallIconSize;
+          double padding;
+
+          if (constraints.maxHeight > 140) {
+            // Large cards
+            valueFontSize = 24;
+            titleFontSize = 14;
+            iconSize = 28;
+            smallIconSize = 18;
+            padding = 20;
+          } else if (constraints.maxHeight > 120) {
+            // Medium-large cards
+            valueFontSize = 20;
+            titleFontSize = 12;
+            iconSize = 24;
+            smallIconSize = 16;
+            padding = 16;
+          } else if (constraints.maxHeight > 100) {
+            // Medium cards
+            valueFontSize = 18;
+            titleFontSize = 11;
+            iconSize = 22;
+            smallIconSize = 15;
+            padding = 14;
+          } else {
+            // Small cards
+            valueFontSize = 16;
+            titleFontSize = 10;
+            iconSize = 20;
+            smallIconSize = 14;
+            padding = 12;
+          }
 
           return Padding(
-            padding: EdgeInsets.all(constraints.maxHeight > 120 ? 16 : 12),
+            padding: EdgeInsets.all(padding),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -44,7 +75,7 @@ class StatCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.1),
+                        color: color.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Icon(icon, color: color, size: smallIconSize),
@@ -128,7 +159,7 @@ class StatCard extends StatelessWidget {
               dotData: FlDotData(show: false),
               belowBarData: BarAreaData(
                 show: true,
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
               ),
             ),
           ],

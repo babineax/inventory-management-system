@@ -117,7 +117,7 @@ class InventoryItem {
   factory InventoryItem.fromDoc(DocumentSnapshot doc) {
     final map = doc.data() as Map<String, dynamic>;
 
-    DateTime? _parseDate(dynamic value) {
+    DateTime? parseDate(dynamic value) {
       if (value == null) return null;
       if (value is Timestamp) return value.toDate();
       if (value is String) return DateTime.tryParse(value);
@@ -132,13 +132,38 @@ class InventoryItem {
       quantity: map['quantity'] ?? 0,
       unitPrice: (map['unitPrice'] ?? 0.0).toDouble(),
       supplier: map['supplier'] ?? '',
-      createdAt: _parseDate(map['createdAt']) ?? DateTime.now(),
-      updatedAt: _parseDate(map['updatedAt']) ?? DateTime.now(),
-      expiryDate: _parseDate(map['expiryDate']),
+      createdAt: parseDate(map['createdAt']) ?? DateTime.now(),
+      updatedAt: parseDate(map['updatedAt']) ?? DateTime.now(),
+      expiryDate: parseDate(map['expiryDate']),
       reorderLevel: map['reorderLevel'] ?? 10,
       imageUrl: map['imageUrl'],
       isPerishable: map['isPerishable'] ?? false,
       snapshot: doc, // keep snapshot for pagination
+    );
+  }
+
+  factory InventoryItem.fromMap(Map<String, dynamic> map, String documentId) {
+    DateTime? parseDate(dynamic value) {
+      if (value == null) return null;
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.tryParse(value);
+      return null;
+    }
+
+    return InventoryItem(
+      id: documentId,
+      name: map['name'] ?? '',
+      description: map['description'] ?? '',
+      category: map['category'] ?? '',
+      quantity: map['quantity'] ?? 0,
+      unitPrice: (map['unitPrice'] ?? 0.0).toDouble(),
+      supplier: map['supplier'] ?? '',
+      createdAt: parseDate(map['createdAt']) ?? DateTime.now(),
+      updatedAt: parseDate(map['updatedAt']) ?? DateTime.now(),
+      expiryDate: parseDate(map['expiryDate']),
+      reorderLevel: map['reorderLevel'] ?? 10,
+      imageUrl: map['imageUrl'],
+      isPerishable: map['isPerishable'] ?? false,
     );
   }
 

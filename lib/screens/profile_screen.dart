@@ -24,6 +24,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   String? profileImagePath;
 
+  // Password visibility states
+  bool _obscureCurrentPassword = true;
+  bool _obscureNewPassword = true;
+  bool _obscureConfirmPassword = true;
+
   // @override
   // void initState() {
   //   super.initState();
@@ -79,7 +84,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Error loading user profile: $e');
+
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -120,7 +125,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               spreadRadius: 2,
             ),
@@ -300,16 +305,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required VoidCallback onTap,
     Color? color,
   }) {
-    final effectiveColor = color ?? Theme.of(context).primaryColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final effectiveColor =
+        color ?? (isDark ? Colors.white : Theme.of(context).primaryColor);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: effectiveColor.withOpacity(0.1),
+          color: effectiveColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: effectiveColor.withOpacity(0.3),
+            color: effectiveColor.withValues(alpha: 0.3),
           ),
         ),
         child: Column(
@@ -513,7 +520,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: GoogleFonts.poppins(
                 fontSize: 14,
                 color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white.withOpacity(0.87)
+                    ? Colors.white.withValues(alpha: 0.87)
                     : Colors.grey[800],
               ),
             ),
@@ -555,8 +562,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: 'Notifications',
               subtitle: 'Manage notification preferences',
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const NotificationSettingsScreen(),
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) =>
+                      const NotificationSettingsScreen(),
+                  transitionDuration: Duration.zero,
+                  reverseTransitionDuration: Duration.zero,
                 ),
               ),
               iconColor: Theme.of(context).brightness == Brightness.dark
@@ -577,8 +587,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: 'Help & Support',
               subtitle: 'Get help and contact support',
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const HelpSupportScreen(),
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) =>
+                      const HelpSupportScreen(),
+                  transitionDuration: Duration.zero,
+                  reverseTransitionDuration: Duration.zero,
                 ),
               ),
               iconColor: Theme.of(context).brightness == Brightness.dark
@@ -612,7 +625,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: (iconColor ?? Theme.of(context).primaryColor).withOpacity(0.1),
+          color: (iconColor ?? Theme.of(context).primaryColor)
+              .withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, color: iconColor ?? Theme.of(context).primaryColor),
@@ -694,8 +708,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 homeState?.selectTab(4); // ensure Profile tab is selected
 
                 Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (context) => const SystemReportsScreen()),
+                  PageRouteBuilder(
+                    pageBuilder: (context, animation, secondaryAnimation) =>
+                        const SystemReportsScreen(),
+                    transitionDuration: Duration.zero,
+                    reverseTransitionDuration: Duration.zero,
+                  ),
                 );
               },
 
@@ -735,7 +753,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               leading: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(Icons.logout, color: Colors.red),
@@ -848,142 +866,169 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Change Password'),
-        content: SingleChildScrollView(
-          child: SizedBox(
-            width: MediaQuery.of(context).size.width * 0.8, // responsive width
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: currentPasswordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'Current Password',
-                    prefixIcon: const Icon(Icons.lock),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Change Password'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width:
+                  MediaQuery.of(context).size.width * 0.8, // responsive width
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: currentPasswordController,
+                    obscureText: _obscureCurrentPassword,
+                    decoration: InputDecoration(
+                      labelText: 'Current Password',
+                      prefixIcon: const Icon(Icons.lock),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscureCurrentPassword
+                            ? Icons.visibility
+                            : Icons.visibility_off),
+                        onPressed: () => setState(() =>
+                            _obscureCurrentPassword = !_obscureCurrentPassword),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: newPasswordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'New Password',
-                    prefixIcon: const Icon(Icons.lock),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: newPasswordController,
+                    obscureText: _obscureNewPassword,
+                    decoration: InputDecoration(
+                      labelText: 'New Password',
+                      prefixIcon: const Icon(Icons.lock),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscureNewPassword
+                            ? Icons.visibility
+                            : Icons.visibility_off),
+                        onPressed: () => setState(
+                            () => _obscureNewPassword = !_obscureNewPassword),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: confirmNewPasswordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'Confirm New Password',
-                    prefixIcon: const Icon(Icons.lock),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: confirmNewPasswordController,
+                    obscureText: _obscureConfirmPassword,
+                    decoration: InputDecoration(
+                      labelText: 'Confirm New Password',
+                      prefixIcon: const Icon(Icons.lock),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscureConfirmPassword
+                            ? Icons.visibility
+                            : Icons.visibility_off),
+                        onPressed: () => setState(() =>
+                            _obscureConfirmPassword = !_obscureConfirmPassword),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                // Validate inputs
+                if (currentPasswordController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Please enter your current password')),
+                  );
+                  return;
+                }
+
+                if (newPasswordController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Please enter a new password')),
+                  );
+                  return;
+                }
+
+                if (newPasswordController.text !=
+                    confirmNewPasswordController.text) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('New passwords do not match')),
+                  );
+                  return;
+                }
+
+                if (newPasswordController.text.length < 6) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content:
+                            Text('New password must be at least 6 characters')),
+                  );
+                  return;
+                }
+
+                // Show loading dialog
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+
+                try {
+                  await AuthService.changePassword(
+                    currentPassword: currentPasswordController.text,
+                    newPassword: newPasswordController.text,
+                  );
+
+                  Navigator.pop(context); // Close loading dialog
+                  Navigator.pop(context); // Close change password dialog
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Password changed successfully!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } catch (e) {
+                  Navigator.pop(context); // Close loading dialog
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(e.toString()),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Change Password',
+                  style: TextStyle(color: Colors.white)),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-
-              // Validate inputs
-              if (currentPasswordController.text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Please enter your current password')),
-                );
-                return;
-              }
-
-              if (newPasswordController.text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Please enter a new password')),
-                );
-                return;
-              }
-
-              if (newPasswordController.text !=
-                  confirmNewPasswordController.text) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('New passwords do not match')),
-                );
-                return;
-              }
-
-              if (newPasswordController.text.length < 6) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content:
-                          Text('New password must be at least 6 characters')),
-                );
-                return;
-              }
-
-              // Show loading dialog
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
-
-              try {
-                await AuthService.changePassword(
-                  currentPassword: currentPasswordController.text,
-                  newPassword: newPasswordController.text,
-                );
-
-                Navigator.pop(context); // Close loading dialog
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Password changed successfully!'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              } catch (e) {
-                Navigator.pop(context); // Close loading dialog
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(e.toString()),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Change Password',
-                style: TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
     );
   }
 
   void _showManageUsersDialog() {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => const AdminUserManagementScreen(),
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const AdminUserManagementScreen(),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
       ),
     );
   }
@@ -1104,11 +1149,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     : Colors.grey.withValues(alpha: 0.1)),
             backgroundImage: MemoryImage(bytes),
             onBackgroundImageError: (exception, stackTrace) {
-              debugPrint('Error loading user profile image: $exception');
+
             },
           );
         } catch (e) {
-          debugPrint('Error decoding base64 profile image: $e');
+
         }
       } else {
         // Handle network URLs
@@ -1122,34 +1167,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   : Colors.grey.withValues(alpha: 0.1)),
           backgroundImage: NetworkImage(user.profilePhotoPath!),
           onBackgroundImageError: (exception, stackTrace) {
-            debugPrint('Error loading network profile image: $exception');
+
           },
         );
       }
     }
 
     // Fallback to initials
+    // Match dashboard: soft white tint and white initials for contrast
     return CircleAvatar(
-      backgroundColor: user?.isActive == true
-          ? (Theme.of(context).brightness == Brightness.dark
-              ? Theme.of(context).primaryColor.withValues(alpha: 0.2)
-              : Theme.of(context).primaryColor.withValues(alpha: 0.1))
-          : (Theme.of(context).brightness == Brightness.dark
-              ? Colors.grey.withValues(alpha: 0.3)
-              : Colors.grey.withValues(alpha: 0.1)),
+      backgroundColor: Colors.white.withValues(alpha: 0.2),
       child: Text(
         user?.displayName.isNotEmpty == true
             ? user.displayName[0].toUpperCase()
             : 'U',
         style: GoogleFonts.poppins(
           fontWeight: FontWeight.w600,
-          color: user?.isActive == true
-              ? (Theme.of(context).brightness == Brightness.dark
-                  ? Theme.of(context).primaryColor
-                  : Theme.of(context).primaryColor)
-              : (Theme.of(context).brightness == Brightness.dark
-                  ? Colors.grey[400]
-                  : Colors.grey[600]),
+          color: Colors.white,
         ),
       ),
     );

@@ -11,6 +11,12 @@ import '../services/inventory_service.dart';
 class StockMovementsScreen extends StatefulWidget {
   const StockMovementsScreen({super.key});
 
+  // Custom colors for filter icons
+  static const Color _selectedFilterColor = Color(0xFF4CAF50); // Green
+  static const Color _unselectedFilterColorLight = Color(0xFF757575); // Grey
+  static const Color _unselectedFilterColorDark =
+      Color(0xFFB0B0B0); // Light grey
+
   @override
   State<StockMovementsScreen> createState() => _StockMovementsScreenState();
 }
@@ -36,10 +42,8 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
   void initState() {
     super.initState();
 
-    // Load demo data immediately
-    _allMovements = _getDemoStockMovements();
-
-    // Load remote data in background
+    // Load remote data
+    _loadingRemote = true;
     _loadRemoteMovements();
   }
 
@@ -63,17 +67,19 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
         });
       }
     } on TimeoutException catch (e) {
-      debugPrint('Timeout loading stock movements: $e');
-      setState(() {
-        _loadingRemote = false;
-        _loadError = e;
-      });
+      if (mounted) {
+        setState(() {
+          _loadingRemote = false;
+          _loadError = e;
+        });
+      }
     } catch (e) {
-      debugPrint('Error loading stock movements: $e');
-      setState(() {
-        _loadingRemote = false;
-        _loadError = e;
-      });
+      if (mounted) {
+        setState(() {
+          _loadingRemote = false;
+          _loadError = e;
+        });
+      }
     }
   }
 
@@ -209,10 +215,12 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
                       icon: Icon(
                         showFilters ? Icons.filter_list_off : Icons.filter_list,
                         color: showFilters
-                            ? Theme.of(context).primaryColor
+                            ? StockMovementsScreen._selectedFilterColor
                             : (Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white60
-                                : Colors.grey[600]),
+                                ? StockMovementsScreen
+                                    ._unselectedFilterColorDark
+                                : StockMovementsScreen
+                                    ._unselectedFilterColorLight),
                       ),
                     ),
                   ],
@@ -473,7 +481,7 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: typeColor.withOpacity(0.1),
+                    color: typeColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(typeIcon, color: typeColor, size: 20),
@@ -500,7 +508,7 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: typeColor.withOpacity(0.1),
+                          color: typeColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -615,22 +623,5 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
       endDate = null;
       _resetPagination();
     });
-  }
-
-  List<StockMovement> _getDemoStockMovements() {
-    return List.generate(
-      100,
-      (index) => StockMovement(
-        id: 'demo_${index + 1}',
-        itemId: 'item_${index + 1}',
-        itemName: 'Demo Item ${index + 1}',
-        quantity: (index + 1) * 2,
-        type: MovementType.values[index % MovementType.values.length],
-        reason: 'Demo reason ${index + 1}',
-        userId: 'user_${index + 1}',
-        userName: 'User ${index + 1}',
-        timestamp: DateTime.now().subtract(Duration(days: index)),
-      ),
-    );
   }
 }

@@ -22,9 +22,7 @@ class InventoryService {
     try {
       // Create default categories if they don't exist
       await _initializeCategories();
-      print('Firestore collections initialized successfully');
     } catch (e) {
-      print('Error initializing Firestore: $e');
       throw InventoryException('Failed to initialize Firestore: $e');
     }
   }
@@ -37,7 +35,6 @@ class InventoryService {
 
       if (categoriesSnapshot.docs.isEmpty) {
         final defaultCategories = getPredefinedCategories();
-        defaultCategories.removeLast(); // Remove "Other"
 
         final batch = _firestore.batch();
         for (final category in defaultCategories) {
@@ -45,11 +42,32 @@ class InventoryService {
           batch.set(docRef, {'name': category});
         }
         await batch.commit();
-        print('Default categories created');
       }
     } catch (e) {
-      print('Error initializing categories: $e');
       throw CategoryException('Failed to initialize categories: $e');
+    }
+  }
+
+  // Ensure a category exists in the categories collection
+  static Future<void> _ensureCategoryExists(String category) async {
+    if (category.isEmpty) return;
+
+    try {
+      // Check if category already exists
+      final existingSnapshot = await _firestore
+          .collection(_categoriesCollection)
+          .where('name', isEqualTo: category)
+          .limit(1)
+          .get();
+
+      if (existingSnapshot.docs.isEmpty) {
+        // Add the category
+        await _firestore
+            .collection(_categoriesCollection)
+            .add({'name': category});
+      }
+    } catch (e) {
+      // Don't throw here as it's not critical for item creation
     }
   }
 
@@ -145,7 +163,6 @@ class InventoryService {
       final snapshot = await query.get();
       return snapshot.docs.map((doc) => InventoryItem.fromDoc(doc)).toList();
     } catch (e) {
-      print('Error getting inventory items: $e');
       throw InventoryException('Failed to get inventory items: $e');
     }
   }
@@ -154,6 +171,9 @@ class InventoryService {
     try {
       final docRef =
           await _firestore.collection(_inventoryCollection).add(item.toMap());
+
+      // Add category to categories collection if it doesn't exist
+      await _ensureCategoryExists(item.category);
 
       // Log initial stock movement
       await _logStockMovement(StockMovement(
@@ -184,7 +204,6 @@ class InventoryService {
 
       return docRef.id;
     } catch (e) {
-      print('Error adding inventory item: $e');
       throw InventoryItemCreationException('Failed to add inventory item: $e');
     }
   }
@@ -195,6 +214,9 @@ class InventoryService {
           .collection(_inventoryCollection)
           .doc(item.id)
           .update(item.toMap());
+
+      // Add category to categories collection if it doesn't exist
+      await _ensureCategoryExists(item.category);
 
       // Check if item needs stock alert after update
       if (item.quantity <= item.reorderLevel) {
@@ -210,7 +232,6 @@ class InventoryService {
         }
       }
     } catch (e) {
-      print('Error updating inventory item: $e');
       throw InventoryItemUpdateException('Failed to update inventory item: $e');
     }
   }
@@ -226,7 +247,6 @@ class InventoryService {
       // Delete prediction
       await _deletePrediction(itemId);
     } catch (e) {
-      print('Error deleting inventory item: $e');
       throw InventoryItemDeletionException(
           'Failed to delete inventory item: $e');
     }
@@ -273,7 +293,6 @@ class InventoryService {
       await _recalculatePrediction(itemId);
       await _checkAndSendPredictionAlert(itemId);
     } catch (e) {
-      print('Error adjusting stock: $e');
       throw StockAdjustmentException('Failed to adjust stock: $e');
     }
   }
@@ -298,7 +317,6 @@ class InventoryService {
               StockMovement.fromMap(doc.data() as Map<String, dynamic>, doc.id))
           .toList();
     } catch (e) {
-      print('Error getting stock movements: $e');
       throw InventoryException('Failed to get stock movements: $e');
     }
   }
@@ -368,9 +386,76 @@ class InventoryService {
         };
       }).toList();
     } catch (e) {
-      print('Error getting monthly movement trends: $e');
       throw InventoryException('Failed to get monthly movement trends: $e');
     }
+  }
+
+  // Real-time monthly trends stream
+  static Stream<List<Map<String, dynamic>>> getMonthlyMovementTrendsStream({
+    int monthsBack = 6,
+  }) {
+    final startDate = DateTime.now().subtract(Duration(days: monthsBack * 30));
+
+    return _firestore
+        .collection(_movementsCollection)
+        .where('timestamp', isGreaterThan: Timestamp.fromDate(startDate))
+        .orderBy('timestamp')
+        .snapshots()
+        .map((snapshot) {
+      try {
+        final movements = snapshot.docs
+            .map((doc) => StockMovement.fromMap(doc.data(), doc.id))
+            .toList();
+
+        // Group movements by month
+        final monthlyData = <String, Map<String, int>>{};
+
+        for (final movement in movements) {
+          final monthKey =
+              '${movement.timestamp.year}-${movement.timestamp.month.toString().padLeft(2, '0')}';
+
+          if (!monthlyData.containsKey(monthKey)) {
+            monthlyData[monthKey] = {
+              'stockIn': 0,
+              'stockOut': 0,
+              'total': 0,
+            };
+          }
+
+          if (movement.type == MovementType.stockIn) {
+            monthlyData[monthKey]!['stockIn'] =
+                monthlyData[monthKey]!['stockIn']! + movement.quantity;
+          } else if (movement.type == MovementType.stockOut) {
+            monthlyData[monthKey]!['stockOut'] =
+                monthlyData[monthKey]!['stockOut']! + movement.quantity;
+          }
+
+          monthlyData[monthKey]!['total'] =
+              monthlyData[monthKey]!['total']! + movement.quantity;
+        }
+
+        // Convert to list and sort by date
+        final sortedData = monthlyData.entries.toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
+
+        // Return the last 6 months of data
+        return sortedData.take(monthsBack).map((entry) {
+          final monthKey = entry.key;
+          final year = int.parse(monthKey.split('-')[0]);
+          final month = int.parse(monthKey.split('-')[1]);
+          final monthName = _getMonthName(month);
+
+          return {
+            'month': monthName,
+            'value': entry.value['total'],
+            'stockIn': entry.value['stockIn'],
+            'stockOut': entry.value['stockOut'],
+          };
+        }).toList();
+      } catch (e) {
+        return [];
+      }
+    });
   }
 
   static String _getMonthName(int month) {
@@ -395,13 +480,64 @@ class InventoryService {
     try {
       await _firestore.collection(_movementsCollection).add(movement.toMap());
     } catch (e) {
-      print('Error logging stock movement: $e');
       throw StockMovementException('Failed to log stock movement: $e');
     }
   }
 
   // Stock Predictions
-  static Future<List<StockPrediction>> getStockPredictions() async {
+  static Future<List<StockPrediction>> getStockPredictions({
+    int limit = 20,
+    DocumentSnapshot? lastDoc,
+  }) async {
+    try {
+      // Get inventory items with pagination
+      Query query = _firestore.collection(_inventoryCollection).orderBy('name');
+
+      if (lastDoc != null) {
+        query = query.startAfterDocument(lastDoc);
+      }
+
+      query = query.limit(limit);
+
+      final itemsSnapshot = await query.get();
+      final items =
+          itemsSnapshot.docs.map((doc) => InventoryItem.fromDoc(doc)).toList();
+
+      // Generate predictions for these items
+      final predictions = <StockPrediction>[];
+
+      for (final item in items) {
+        // First, try to get existing prediction from database
+        final existingPrediction = await getItemPrediction(item.id);
+
+        if (existingPrediction != null) {
+          // Use existing prediction if available and recent (within 24 hours)
+          final isRecent = DateTime.now()
+                  .difference(existingPrediction.calculatedAt)
+                  .inHours <
+              24;
+          if (isRecent) {
+            predictions.add(existingPrediction);
+            continue;
+          }
+        }
+
+        // Calculate new prediction based on actual historical data
+        final prediction = await _calculateAccuratePrediction(item);
+        predictions.add(prediction);
+      }
+
+      // Sort by days left (most urgent first)
+      predictions.sort((a, b) => a.daysLeft.compareTo(b.daysLeft));
+
+      return predictions;
+    } catch (e) {
+      throw InventoryException('Failed to get stock predictions: $e');
+    }
+  }
+
+  // Get all predictions (for backward compatibility, but use with caution as it's expensive)
+  static Future<List<StockPrediction>> getAllStockPredictions() async {
     try {
       // Get all inventory items first
       final itemsSnapshot =
@@ -413,62 +549,24 @@ class InventoryService {
       final predictions = <StockPrediction>[];
 
       for (final item in items) {
-        // Check if item needs restock (low stock or expiring soon)
-        final isLowStock = item.quantity <= item.reorderLevel;
-        final isOutOfStock = item.quantity == 0;
+        // First, try to get existing prediction from database
+        final existingPrediction = await getItemPrediction(item.id);
 
-        // Calculate days left based on current stock and reorder level
-        int daysLeft;
-        if (isOutOfStock) {
-          daysLeft = 0;
-        } else if (isLowStock) {
-          // If low stock, estimate based on remaining quantity
-          daysLeft =
-              (item.quantity / (item.reorderLevel * 0.1)).ceil().clamp(1, 7);
-        } else {
-          // Estimate based on stock level
-          final stockRatio = item.quantity / item.reorderLevel;
-          if (stockRatio > 3) {
-            daysLeft = 30 + (stockRatio * 5).toInt();
-          } else if (stockRatio > 2) {
-            daysLeft = 14 + (stockRatio * 3).toInt();
-          } else {
-            daysLeft = 7 + (stockRatio * 2).toInt();
+        if (existingPrediction != null) {
+          // Use existing prediction if available and recent (within 24 hours)
+          final isRecent = DateTime.now()
+                  .difference(existingPrediction.calculatedAt)
+                  .inHours <
+              24;
+          if (isRecent) {
+            predictions.add(existingPrediction);
+            continue;
           }
         }
 
-        // Check for expiry date if item is perishable
-        if (item.isPerishable && item.expiryDate != null) {
-          final daysUntilExpiry =
-              item.expiryDate!.difference(DateTime.now()).inDays;
-          if (daysUntilExpiry < daysLeft) {
-            daysLeft = daysUntilExpiry.clamp(0, daysLeft);
-          }
-        }
-
-        final needsRestock = isLowStock || isOutOfStock || daysLeft <= 7;
-
-        // Determine confidence based on data availability
-        PredictionConfidence confidence;
-        if (item.isPerishable && item.expiryDate != null) {
-          confidence = PredictionConfidence.high;
-        } else if (isLowStock || isOutOfStock) {
-          confidence = PredictionConfidence.medium;
-        } else {
-          confidence = PredictionConfidence.low;
-        }
-
-        predictions.add(StockPrediction(
-          itemId: item.id,
-          itemName: item.name,
-          currentQuantity: item.quantity,
-          averageDailyUsage: item.reorderLevel * 0.1, // Estimated usage
-          daysLeft: daysLeft,
-          predictedDepletionDate: DateTime.now().add(Duration(days: daysLeft)),
-          needsRestock: needsRestock,
-          confidence: confidence,
-          calculatedAt: DateTime.now(),
-        ));
+        // Calculate new prediction based on actual historical data
+        final prediction = await _calculateAccuratePrediction(item);
+        predictions.add(prediction);
       }
 
       // Sort by days left (most urgent first)
@@ -476,9 +574,40 @@ class InventoryService {
 
       return predictions;
     } catch (e) {
-      print('Error getting stock predictions: $e');
       throw InventoryException('Failed to get stock predictions: $e');
     }
+  }
+
+  // Get paginated inventory items with document snapshots for predictions
+  static Future<List<Map<String, dynamic>>> getInventoryItemsWithSnapshots({
+    int limit = 20,
+    DocumentSnapshot? lastDoc,
+  }) async {
+    try {
+      Query query = _firestore.collection(_inventoryCollection).orderBy('name');
+
+      if (lastDoc != null) {
+        query = query.startAfterDocument(lastDoc);
+      }
+
+      query = query.limit(limit);
+
+      final snapshot = await query.get();
+      return snapshot.docs
+          .map((doc) => {
+                'item': InventoryItem.fromDoc(doc),
+                'snapshot': doc,
+              })
+          .toList();
+    } catch (e) {
+      throw InventoryException('Failed to get inventory items: $e');
+    }
+  }
+
+  // Calculate prediction for a single item (public method)
+  static Future<StockPrediction> calculatePredictionForItem(
+      InventoryItem item) async {
+    return await _calculateAccuratePrediction(item);
   }
 
   static Future<StockPrediction?> getItemPrediction(String itemId) async {
@@ -494,10 +623,152 @@ class InventoryService {
       }
       return null;
     } catch (e) {
-      print('Error getting item prediction: $e');
       // For this method, we'll return null as it's already expected to possibly return null
       return null;
     }
+  }
+
+  static Future<StockPrediction> _calculateAccuratePrediction(
+      InventoryItem item) async {
+    try {
+      // Get movements from last 30 days
+      final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+      final movementsSnapshot = await _firestore
+          .collection(_movementsCollection)
+          .where('itemId', isEqualTo: item.id)
+          .where('timestamp', isGreaterThan: Timestamp.fromDate(thirtyDaysAgo))
+          .orderBy('timestamp', descending: true)
+          .get();
+
+      // Check if item needs restock (low stock or expiring soon)
+      final isLowStock = item.quantity <= item.reorderLevel;
+      final isOutOfStock = item.quantity == 0;
+
+      // Calculate days left based on current stock and reorder level
+      int daysLeft;
+      double averageDailyUsage = 0.0;
+
+      if (movementsSnapshot.docs.isNotEmpty) {
+        // Calculate actual daily usage from historical data
+        final movements = movementsSnapshot.docs
+            .map((doc) => StockMovement.fromMap(doc.data(), doc.id))
+            .toList();
+
+        final dailyUsage = <String, int>{};
+        for (final movement in movements) {
+          if (movement.type == MovementType.stockOut) {
+            final dateKey =
+                movement.timestamp.toIso8601String().substring(0, 10);
+            dailyUsage[dateKey] =
+                (dailyUsage[dateKey] ?? 0) + movement.quantity;
+          }
+        }
+
+        if (dailyUsage.isNotEmpty) {
+          final totalUsageInt = dailyUsage.values.reduce((a, b) => a + b);
+          final totalUsage = totalUsageInt.toDouble();
+          final usageDays = dailyUsage.length;
+          averageDailyUsage = usageDays > 0 ? totalUsage / usageDays : 0.0;
+
+          // Calculate days left based on actual usage
+          daysLeft = averageDailyUsage > 0
+              ? (item.quantity.toDouble() / averageDailyUsage).ceil()
+              : 999;
+        } else {
+          // No stock-out movements, use fallback estimation
+          daysLeft = _calculateFallbackDaysLeft(item, isLowStock, isOutOfStock);
+        }
+      } else {
+        // No historical data, use fallback estimation
+        daysLeft = _calculateFallbackDaysLeft(item, isLowStock, isOutOfStock);
+      }
+
+      // Check for expiry date if item is perishable
+      if (item.isPerishable && item.expiryDate != null) {
+        final daysUntilExpiry =
+            item.expiryDate!.difference(DateTime.now()).inDays;
+        if (daysUntilExpiry < daysLeft) {
+          daysLeft = daysUntilExpiry.clamp(0, daysLeft);
+        }
+      }
+
+      final needsRestock = isLowStock || isOutOfStock || daysLeft <= 7;
+
+      // Determine confidence based on data availability
+      PredictionConfidence confidence;
+      final hasHistoricalData = movementsSnapshot.docs.isNotEmpty;
+      final usageDays = hasHistoricalData ? movementsSnapshot.docs.length : 0;
+
+      if (item.isPerishable && item.expiryDate != null) {
+        confidence = hasHistoricalData
+            ? PredictionConfidence.high
+            : PredictionConfidence.medium;
+      } else if (hasHistoricalData) {
+        if (usageDays >= 14) {
+          confidence = PredictionConfidence.high;
+        } else if (usageDays >= 7) {
+          confidence = PredictionConfidence.medium;
+        } else {
+          confidence = PredictionConfidence.low;
+        }
+      } else {
+        confidence = PredictionConfidence.low;
+      }
+
+      return StockPrediction(
+        itemId: item.id,
+        itemName: item.name,
+        currentQuantity: item.quantity,
+        averageDailyUsage: averageDailyUsage,
+        daysLeft: daysLeft,
+        predictedDepletionDate: DateTime.now().add(Duration(days: daysLeft)),
+        needsRestock: needsRestock,
+        confidence: confidence,
+        calculatedAt: DateTime.now(),
+      );
+    } catch (e) {
+      // Return fallback prediction on error
+      return _createFallbackPrediction(item);
+    }
+  }
+
+  static int _calculateFallbackDaysLeft(
+      InventoryItem item, bool isLowStock, bool isOutOfStock) {
+    if (isOutOfStock) {
+      return 0;
+    } else if (isLowStock) {
+      // If low stock, estimate based on remaining quantity relative to reorder level
+      final stockRatio = item.quantity / item.reorderLevel;
+      return (stockRatio * 7).ceil().clamp(1, 7);
+    } else {
+      // Estimate based on stock level
+      final stockRatio = item.quantity / item.reorderLevel;
+      if (stockRatio > 3) {
+        return 30 + (stockRatio * 5).toInt();
+      } else if (stockRatio > 2) {
+        return 14 + (stockRatio * 3).toInt();
+      } else {
+        return 7 + (stockRatio * 2).toInt();
+      }
+    }
+  }
+
+  static StockPrediction _createFallbackPrediction(InventoryItem item) {
+    final isLowStock = item.quantity <= item.reorderLevel;
+    final isOutOfStock = item.quantity == 0;
+    final daysLeft = _calculateFallbackDaysLeft(item, isLowStock, isOutOfStock);
+
+    return StockPrediction(
+      itemId: item.id,
+      itemName: item.name,
+      currentQuantity: item.quantity,
+      averageDailyUsage: item.reorderLevel * 0.1, // Rough estimate
+      daysLeft: daysLeft,
+      predictedDepletionDate: DateTime.now().add(Duration(days: daysLeft)),
+      needsRestock: isLowStock || isOutOfStock || daysLeft <= 7,
+      confidence: PredictionConfidence.low,
+      calculatedAt: DateTime.now(),
+    );
   }
 
   static Future<void> _recalculatePrediction(String itemId) async {
@@ -509,79 +780,12 @@ class InventoryService {
 
       final item = InventoryItem.fromDoc(itemDoc);
 
-      // Get movements from last 30 days
-      final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
-      final movementsSnapshot = await _firestore
-          .collection(_movementsCollection)
-          .where('itemId', isEqualTo: itemId)
-          .where('timestamp', isGreaterThan: Timestamp.fromDate(thirtyDaysAgo))
-          .orderBy('timestamp', descending: true)
-          .get();
+      // Calculate accurate prediction
+      final prediction = await _calculateAccuratePrediction(item);
 
-      if (movementsSnapshot.docs.isEmpty) {
-        await _savePrediction(StockPrediction(
-          itemId: itemId,
-          itemName: item.name,
-          currentQuantity: item.quantity,
-          averageDailyUsage: 0,
-          daysLeft: item.quantity > 0 ? 999 : 0,
-          predictedDepletionDate: DateTime.now().add(const Duration(days: 999)),
-          needsRestock: item.quantity <= item.reorderLevel,
-          confidence: PredictionConfidence.low,
-          calculatedAt: DateTime.now(),
-        ));
-        return;
-      }
-
-      // Calculate daily usage
-      double totalUsage = 0;
-      int usageDays = 0;
-      final movements = movementsSnapshot.docs
-          .map((doc) => StockMovement.fromMap(doc.data(), doc.id))
-          .toList();
-
-      final dailyUsage = <String, int>{};
-      for (final movement in movements) {
-        if (movement.type == MovementType.stockOut) {
-          final dateKey = movement.timestamp.toIso8601String().substring(0, 10);
-          dailyUsage[dateKey] = (dailyUsage[dateKey] ?? 0) + movement.quantity;
-        }
-      }
-
-      if (dailyUsage.isNotEmpty) {
-        final totalUsageInt = dailyUsage.values.reduce((a, b) => a + b);
-        totalUsage = totalUsageInt.toDouble();
-        usageDays = dailyUsage.length;
-      }
-
-      final averageDailyUsage = usageDays > 0 ? totalUsage / usageDays : 0.0;
-      final daysLeft = averageDailyUsage > 0
-          ? (item.quantity.toDouble() / averageDailyUsage).ceil()
-          : 999;
-      final predictedDate = DateTime.now().add(Duration(days: daysLeft));
-
-      PredictionConfidence confidence;
-      if (usageDays >= 14) {
-        confidence = PredictionConfidence.high;
-      } else if (usageDays >= 7) {
-        confidence = PredictionConfidence.medium;
-      } else {
-        confidence = PredictionConfidence.low;
-      }
-
-      await _savePrediction(StockPrediction(
-        itemId: itemId,
-        itemName: item.name,
-        currentQuantity: item.quantity,
-        averageDailyUsage: averageDailyUsage,
-        daysLeft: daysLeft,
-        predictedDepletionDate: predictedDate,
-        needsRestock: item.quantity <= item.reorderLevel || daysLeft <= 7,
-        confidence: confidence,
-        calculatedAt: DateTime.now(),
-      ));
+      // Save the prediction
+      await _savePrediction(prediction);
     } catch (e) {
-      print('Error calculating prediction for item $itemId: $e');
       throw PredictionCalculationException(
           'Error calculating prediction for item $itemId: $e');
     }
@@ -609,7 +813,6 @@ class InventoryService {
             .add(prediction.toMap());
       }
     } catch (e) {
-      print('Error saving prediction: $e');
       throw PredictionCalculationException('Failed to save prediction: $e');
     }
   }
@@ -628,7 +831,6 @@ class InventoryService {
       }
       await batch.commit();
     } catch (e) {
-      print('Error deleting item movements: $e');
       throw InventoryItemDeletionException(
           'Failed to delete item movements: $e');
     }
@@ -649,7 +851,6 @@ class InventoryService {
             .delete();
       }
     } catch (e) {
-      print('Error deleting prediction: $e');
       throw InventoryItemDeletionException('Failed to delete prediction: $e');
     }
   }
@@ -682,9 +883,52 @@ class InventoryService {
         'itemsNeedingRestock': predictionsSnapshot.docs.length,
       };
     } catch (e) {
-      print('Error getting dashboard stats: $e');
       throw DashboardStatsException('Failed to get dashboard stats: $e');
     }
+  }
+
+  // Real-time dashboard statistics stream
+  static Stream<Map<String, dynamic>> getDashboardStatsStream() {
+    return _firestore
+        .collection(_inventoryCollection)
+        .snapshots()
+        .asyncMap((itemsSnapshot) async {
+      try {
+        final items = itemsSnapshot.docs
+            .map((doc) => InventoryItem.fromDoc(doc))
+            .toList();
+
+        final totalItems = items.length;
+        final totalValue = items.fold<double>(
+            0, (sum, item) => sum + (item.quantity * item.unitPrice));
+        final lowStockItems =
+            items.where((item) => item.quantity <= item.reorderLevel).length;
+        final outOfStockItems =
+            items.where((item) => item.quantity == 0).length;
+
+        final predictionsSnapshot = await _firestore
+            .collection(_predictionsCollection)
+            .where('needsRestock', isEqualTo: true)
+            .get();
+
+        return {
+          'totalItems': totalItems,
+          'totalValue': totalValue,
+          'lowStockItems': lowStockItems,
+          'outOfStockItems': outOfStockItems,
+          'itemsNeedingRestock': predictionsSnapshot.docs.length,
+        };
+      } catch (e) {
+        // Return empty data on error to keep stream alive
+        return {
+          'totalItems': 0,
+          'totalValue': 0.0,
+          'lowStockItems': 0,
+          'outOfStockItems': 0,
+          'itemsNeedingRestock': 0,
+        };
+      }
+    });
   }
 
   // Get category statistics for dashboard
@@ -706,9 +950,34 @@ class InventoryService {
 
       return categoryStats;
     } catch (e) {
-      print('Error getting category stats: $e');
       throw InventoryException('Failed to get category stats: $e');
     }
+  }
+
+  // Real-time category statistics stream
+  static Stream<Map<String, int>> getCategoryStatsStream() {
+    return _firestore
+        .collection(_inventoryCollection)
+        .snapshots()
+        .map((itemsSnapshot) {
+      try {
+        final items = itemsSnapshot.docs
+            .map((doc) => InventoryItem.fromDoc(doc))
+            .toList();
+
+        final categoryStats = <String, int>{};
+
+        for (final item in items) {
+          final category = item.category.isNotEmpty ? item.category : 'Other';
+          categoryStats[category] =
+              (categoryStats[category] ?? 0) + item.quantity;
+        }
+
+        return categoryStats;
+      } catch (e) {
+        return {};
+      }
+    });
   }
 
   // Categories
@@ -725,14 +994,18 @@ class InventoryService {
         return getPredefinedCategories();
       }
 
-      return snapshot.docs.map((doc) => doc.data()['name'] as String).toList();
+      // Get unique category names
+      final categories = snapshot.docs
+          .map((doc) => doc.data()['name'] as String)
+          .toSet()
+          .toList();
+      return categories;
     } catch (e) {
-      print('Error getting categories: $e');
       throw CategoryException('Failed to get categories: $e');
     }
   }
 
-  // Predefined categories with "Other" option
+  // Predefined categories (custom categories can be added via "+ Add New Category")
   static List<String> getPredefinedCategories() {
     return [
       'Electronics',
@@ -746,8 +1019,7 @@ class InventoryService {
       'Furniture',
       'Cleaning Supplies',
       'Sports & Recreation',
-      'Beauty & Personal Care',
-      'Other'
+      'Beauty & Personal Care'
     ];
   }
 
@@ -769,7 +1041,6 @@ class InventoryService {
         await _sendLowStockAlert(lowStockItems);
       }
     } catch (e) {
-      print('Error checking low stock: $e');
       throw InventoryException('Failed to check low stock: $e');
     }
   }
@@ -777,18 +1048,7 @@ class InventoryService {
   static Future<void> _sendLowStockAlert(
       List<InventoryItem> lowStockItems) async {
     // In a real app, this would send actual emails
-    // For now, this implementation just logs the alert
-    print('🚨 LOW STOCK ALERT 🚨');
-    print('The following items need restocking:');
-    for (final item in lowStockItems) {
-      if (item.quantity == 0) {
-        print('❌ OUT OF STOCK: ${item.name}');
-      } else {
-        print(
-            '⚠️  LOW STOCK: ${item.name} (${item.quantity} remaining, reorder at ${item.reorderLevel})');
-      }
-    }
-    print('Please restock these items as soon as possible.');
+    // For now, this implementation just sends notifications
 
     // Send notifications to all active users
     try {
@@ -800,9 +1060,7 @@ class InventoryService {
           }
         }
       }
-    } catch (e) {
-      print('Error sending stock alert notifications: $e');
-    }
+    } catch (e) {}
   }
 
   // Trigger stock alert for a specific item
@@ -814,9 +1072,7 @@ class InventoryService {
           await NotificationService.sendStockAlert(user: user, item: item);
         }
       }
-    } catch (e) {
-      print('Error triggering stock alert: $e');
-    }
+    } catch (e) {}
   }
 
   // Trigger expiry alert for a specific item
@@ -833,9 +1089,7 @@ class InventoryService {
           );
         }
       }
-    } catch (e) {
-      print('Error triggering expiry alert: $e');
-    }
+    } catch (e) {}
   }
 
   // Check and send prediction alert for a specific item
@@ -870,9 +1124,7 @@ class InventoryService {
           }
         }
       }
-    } catch (e) {
-      print('Error checking prediction alert: $e');
-    }
+    } catch (e) {}
   }
 
   // Add this method to your InventoryService class
@@ -887,7 +1139,6 @@ class InventoryService {
       }
       return null;
     } catch (e) {
-      print('Error getting user data: $e');
       throw InventoryException('Failed to get user data: $e');
     }
   }

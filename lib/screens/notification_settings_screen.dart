@@ -178,16 +178,21 @@ class _NotificationSettingsScreenState
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            Theme.of(context).primaryColor.withOpacity(0.1),
-                            Theme.of(context).primaryColor.withOpacity(0.05),
+                            Theme.of(context)
+                                .primaryColor
+                                .withValues(alpha: 0.1),
+                            Theme.of(context)
+                                .primaryColor
+                                .withValues(alpha: 0.05),
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color:
-                              Theme.of(context).primaryColor.withOpacity(0.2),
+                          color: Theme.of(context)
+                              .primaryColor
+                              .withValues(alpha: 0.2),
                         ),
                       ),
                       child: Column(
@@ -400,7 +405,7 @@ class _NotificationSettingsScreenState
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.blue[900]!.withOpacity(0.3)
+                            ? Colors.blue[900]!.withValues(alpha: 0.3)
                             : Colors.blue[50],
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
@@ -482,7 +487,8 @@ class _NotificationSettingsScreenState
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor.withOpacity(0.1),
+                    color:
+                        Theme.of(context).primaryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -525,7 +531,7 @@ class _NotificationSettingsScreenState
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).brightness == Brightness.dark
-            ? Colors.grey[800]?.withOpacity(0.3)
+            ? Colors.grey[800]?.withValues(alpha: 0.3)
             : Colors.grey[50],
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
@@ -540,7 +546,7 @@ class _NotificationSettingsScreenState
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: (iconColor ?? Theme.of(context).primaryColor)
-                  .withOpacity(0.1),
+                  .withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Icon(
@@ -580,7 +586,7 @@ class _NotificationSettingsScreenState
           Switch.adaptive(
             value: value,
             onChanged: onChanged,
-            activeColor: Theme.of(context).primaryColor,
+            activeThumbColor: Theme.of(context).primaryColor,
           ),
         ],
       ),

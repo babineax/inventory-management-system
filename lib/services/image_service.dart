@@ -26,7 +26,6 @@ class ImageService {
 
       return downloadUrl;
     } catch (e) {
-      print('Error uploading profile image: $e');
       return null;
     }
   }
@@ -50,7 +49,6 @@ class ImageService {
 
       return downloadUrl;
     } catch (e) {
-      print('Error uploading inventory image: $e');
       return null;
     }
   }
@@ -66,7 +64,6 @@ class ImageService {
 
       return true;
     } catch (e) {
-      print('Error deleting image: $e');
       return false;
     }
   }

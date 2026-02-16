@@ -43,7 +43,6 @@ class ThemeProvider extends ChangeNotifier {
         secondary: secondaryGreen,
         tertiary: accentGreen,
         surface: Colors.white,
-        background: const Color(0xFFF8FDF8), // Very subtle green tint
         error: Colors.redAccent.shade700,
         brightness: Brightness.light,
       ),
@@ -69,7 +68,7 @@ class ThemeProvider extends ChangeNotifier {
           borderRadius: BorderRadius.circular(16),
         ),
         color: Colors.white,
-        shadowColor: Colors.black.withOpacity(0.15),
+        shadowColor: Colors.black.withValues(alpha: 0.15),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: primaryGreen,
@@ -168,13 +167,11 @@ class ThemeProvider extends ChangeNotifier {
         secondary: accentGreen,
         tertiary: secondaryGreen,
         surface: const Color(0xFF1E1E1E),
-        background: const Color(0xFF121212),
         error: Colors.redAccent.shade400,
         brightness: Brightness.dark,
         onPrimary: Colors.black87,
         onSecondary: Colors.white,
         onSurface: Colors.white,
-        onBackground: Colors.white,
       ),
       textTheme:
           GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme).copyWith(
@@ -192,11 +189,11 @@ class ThemeProvider extends ChangeNotifier {
         bodyLarge: GoogleFonts.poppins(
           fontSize: 16,
           letterSpacing: 0.5,
-          color: Colors.white.withOpacity(0.87),
+          color: Colors.white.withValues(alpha: 0.87),
         ),
         bodyMedium: GoogleFonts.poppins(
           fontSize: 14,
-          color: Colors.white.withOpacity(0.87),
+          color: Colors.white.withValues(alpha: 0.87),
         ),
         bodySmall: GoogleFonts.poppins(
           fontSize: 12,
@@ -224,7 +221,7 @@ class ThemeProvider extends ChangeNotifier {
           borderRadius: BorderRadius.circular(16),
         ),
         color: const Color(0xFF2D2D2D),
-        shadowColor: Colors.black.withOpacity(0.4),
+        shadowColor: Colors.black.withValues(alpha: 0.4),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: const Color(0xFF1E1E1E),
@@ -358,7 +355,7 @@ class ThemeProvider extends ChangeNotifier {
       chipTheme: ChipThemeData(
         backgroundColor: const Color(0xFF2D2D2D),
         labelStyle: GoogleFonts.poppins(color: Colors.white),
-        selectedColor: lightGreen.withOpacity(0.3),
+        selectedColor: lightGreen.withValues(alpha: 0.3),
         disabledColor: Colors.grey.shade700,
         brightness: Brightness.dark,
       ),
@@ -371,7 +368,7 @@ class ThemeProvider extends ChangeNotifier {
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return lightGreen.withOpacity(0.5);
+            return lightGreen.withValues(alpha: 0.5);
           }
           return Colors.grey.shade600;
         }),

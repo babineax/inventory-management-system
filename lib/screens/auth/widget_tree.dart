@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import '../../services/auth_service.dart';
 import '../auth/login_register_page.dart';
 import '../home_page.dart';
-import '../../models/user_model.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 class WidgetTree extends StatefulWidget {
   const WidgetTree({super.key});
@@ -13,76 +11,57 @@ class WidgetTree extends StatefulWidget {
 }
 
 class _WidgetTreeState extends State<WidgetTree> {
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthState();
+  }
+
+  Future<void> _checkAuthState() async {
+    // Give Firebase Auth a moment to initialize
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+
+    // Listen to auth state changes for future updates
+    AuthService.authStateChanges.listen((user) {
+      if (mounted) {
+        // Auth state changed, rebuild the widget
+        setState(() {});
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        if (snapshot.hasData && snapshot.data != null) {
-          // User is logged in
-          return FutureBuilder<UserModel?>(
-            future: _getUserData(snapshot.data!.uid),
-            builder: (context, userSnapshot) {
-              if (userSnapshot.connectionState == ConnectionState.waiting) {
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
-                );
-              }
-
-              // Apply a professional page transition animation
-              return PageTransition(
-                type: PageTransitionType.professionalSlide,
-                child: HomePage(currentUser: userSnapshot.data),
-              );
-            },
-          );
-        } else {
-          // User is not logged in
-          return const PageTransition(
-            type: PageTransitionType.fade,
-            child: LoginPage(),
-          );
-        }
-      },
-    );
-  }
-
-  // Helper method to get user data
-  Future<UserModel?> _getUserData(String uid) async {
-    try {
-      final doc =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      if (doc.exists) {
-        final data = doc.data() ?? {};
-
-        // Convert directly to UserModel using the correct constructor parameters
-        return UserModel(
-          uid: doc.id,
-          email: data['email'] ?? '',
-          displayName: data['displayName'],
-          isAdmin: data['role'] == 'admin',
-          createdAt: data['createdAt']?.toDate(),
-        );
-      }
-      return null;
-    } catch (e) {
-      print('Error getting user data: $e');
-      return null;
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
-  }
 
-  // Helper method to parse user role
-  UserRole _parseUserRole(String? roleStr) {
-    if (roleStr == 'admin') {
-      return UserRole.admin;
+    // Check current user synchronously
+    final currentUser = AuthService.currentUser;
+
+    if (currentUser != null) {
+      // User is authenticated
+      return PageTransition(
+        type: PageTransitionType.professionalSlide,
+        child: HomePage(currentUser: currentUser),
+      );
+    } else {
+      // User is not authenticated
+      return const PageTransition(
+        type: PageTransitionType.fade,
+        child: LoginPage(),
+      );
     }
-    return UserRole.staff;
   }
 }
 

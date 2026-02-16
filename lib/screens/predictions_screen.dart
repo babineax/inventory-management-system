@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/inventory_service.dart';
 import '../models/stock_prediction.dart';
+import '../models/inventory_item.dart';
+import '../widgets/loading_widget.dart';
+import '../utils/date_utils.dart' as CustomDateUtils;
 
 class PredictionsScreen extends StatefulWidget {
   const PredictionsScreen({super.key});
+
+  // Custom colors for filter icons
+  static const Color _selectedFilterColor = Color(0xFF2196F3); // Blue
+  static const Color _unselectedFilterColorLight = Color(0xFF757575); // Grey
+  static const Color _unselectedFilterColorDark =
+      Color(0xFFB0B0B0); // Light grey
 
   @override
   State<PredictionsScreen> createState() => _PredictionsScreenState();
@@ -18,52 +28,132 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
   bool showFilters = false;
 
   // Pagination
-  int currentPage = 1;
-  final int pageSize = 20;
+  int _currentPage = 1;
+  final int _pageSize = 10; // Smaller page size for faster loading
 
   // Data
   List<StockPrediction> _allPredictions = [];
-  List<StockPrediction> _displayedPredictions = [];
   bool _isLoading = true;
-  bool _usingDemoData = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _fetchPredictionsWithFallback();
+
+    // Load real data
+    _loadRealPredictions();
   }
 
-  Future<void> _fetchPredictionsWithFallback() async {
-    // Show demo data immediately
+  Future<void> _loadRealPredictions() async {
     setState(() {
-      _allPredictions = _generateDemoData();
-      _updateDisplayedPredictions();
       _isLoading = true;
-      _usingDemoData = true;
+      _error = null;
     });
 
     try {
-      final predictions = await InventoryService.getStockPredictions();
-      setState(() {
-        _allPredictions = predictions;
-        _usingDemoData = false;
-        _error = null;
-        _updateDisplayedPredictions();
-      });
+      // Load ALL inventory items from database using pagination
+      final allItems = await _getAllInventoryItems();
+
+      // Generate predictions for all items concurrently to reduce wait time
+      final predictions = await Future.wait(
+        allItems.map((item) async {
+          // First, try to get existing prediction from database
+          final existingPrediction =
+              await InventoryService.getItemPrediction(item.id);
+
+          if (existingPrediction != null) {
+            // Use existing prediction if available and recent (within 24 hours)
+            final isRecent = DateTime.now()
+                    .difference(existingPrediction.calculatedAt)
+                    .inHours <
+                24;
+            if (isRecent) {
+              return existingPrediction;
+            }
+          }
+
+          // Calculate new prediction based on actual historical data
+          return InventoryService.calculatePredictionForItem(item);
+        }),
+        eagerError: false,
+      );
+
+      // Sort by days left (most urgent first)
+      predictions.sort((a, b) => a.daysLeft.compareTo(b.daysLeft));
+
+      if (mounted) {
+        setState(() {
+          _allPredictions = predictions;
+          _isLoading = false;
+          _resetPagination();
+        });
+      }
     } catch (e) {
-      print('Error fetching stock predictions: $e');
-      setState(() {
-        _error = e.toString();
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+          _resetPagination();
+        });
+      }
     }
   }
 
-  void _updateDisplayedPredictions() {
+  // Helper method to get ALL inventory items using pagination
+  Future<List<InventoryItem>> _getAllInventoryItems() async {
+    final allItems = <InventoryItem>[];
+    DocumentSnapshot? lastDoc;
+    const batchSize = 100; // Process in batches to avoid memory issues
+
+    while (true) {
+      final batch = await InventoryService.getInventoryItems(
+        limit: batchSize,
+        lastDoc: lastDoc,
+      );
+
+      if (batch.isEmpty) break;
+
+      allItems.addAll(batch);
+      lastDoc = batch.last.snapshot;
+
+      // Safety check to prevent infinite loops (though unlikely)
+      if (batch.length < batchSize) break;
+    }
+
+    return allItems;
+  }
+
+  void _prevPage() {
+    setState(() {
+      if (_currentPage > 1) {
+        _currentPage--;
+      }
+    });
+  }
+
+  void _nextPage(int totalPages) {
+    setState(() {
+      if (_currentPage < totalPages) {
+        _currentPage++;
+      }
+    });
+  }
+
+  void _resetPagination() {
+    _currentPage = 1;
+  }
+
+  void _clearFilters() {
+    setState(() {
+      selectedConfidence = null;
+      showOnlyUrgent = false;
+      searchQuery = '';
+      _resetPagination();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final filtered = _allPredictions.where((prediction) {
       if (searchQuery.isNotEmpty &&
           !prediction.itemName.toLowerCase().contains(searchQuery)) {
@@ -77,41 +167,15 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
         return false;
       }
       return true;
-    }).toList()
-      ..sort((a, b) => a.daysLeft.compareTo(b.daysLeft));
+    }).toList();
 
-    final startIndex = (currentPage - 1) * pageSize;
-    final endIndex = startIndex + pageSize;
-    _displayedPredictions = filtered.sublist(
-        startIndex, endIndex > filtered.length ? filtered.length : endIndex);
-  }
+    final totalPages = (filtered.length / _pageSize).ceil();
+    final startIndex = (_currentPage - 1) * _pageSize;
+    final endIndex = startIndex + _pageSize > filtered.length
+        ? filtered.length
+        : startIndex + _pageSize;
+    final displayedPredictions = filtered.sublist(startIndex, endIndex);
 
-  void _nextPage() {
-    setState(() {
-      currentPage++;
-      _updateDisplayedPredictions();
-    });
-  }
-
-  void _prevPage() {
-    setState(() {
-      if (currentPage > 1) currentPage--;
-      _updateDisplayedPredictions();
-    });
-  }
-
-  void _clearFilters() {
-    setState(() {
-      selectedConfidence = null;
-      showOnlyUrgent = false;
-      searchQuery = '';
-      currentPage = 1;
-      _updateDisplayedPredictions();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).brightness == Brightness.dark
           ? Theme.of(context).scaffoldBackgroundColor
@@ -120,23 +184,53 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
         children: [
           _buildSearchAndFilterSection(),
           Expanded(
-            child: _isLoading && _usingDemoData
-                ? _buildList()
+            child: _isLoading
+                ? const LoadingWidget()
                 : _error != null
                     ? _buildErrorWidget(_error!)
-                    : _displayedPredictions.isEmpty
+                    : displayedPredictions.isEmpty
                         ? _buildEmptyWidget()
-                        : _buildList(),
+                        : _buildList(displayedPredictions),
           ),
-          if (_displayedPredictions.isNotEmpty) _buildPaginationControls(),
+          if (filtered.isNotEmpty)
+            _buildPaginationControls(filtered, totalPages),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showStatusInterpretationDialog,
-        tooltip: 'Prediction Status Guide',
-        backgroundColor: Theme.of(context).primaryColor,
-        foregroundColor: Colors.white,
-        child: const Icon(Icons.help_outline),
+      floatingActionButton: Tooltip(
+        message: 'Prediction Status Guide',
+        textStyle: GoogleFonts.poppins(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white
+              : Colors.black87,
+          fontSize: 14,
+        ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.grey[800]
+              : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.grey[600]!
+                : Colors.grey[300]!,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          onPressed: _showStatusInterpretationDialog,
+          backgroundColor: Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFF2196F3) // Bright blue in dark mode
+              : const Color(0xFF1976D2), // Deep blue in light mode
+          foregroundColor: Colors.white,
+          elevation: 8,
+          child: const Icon(Icons.help_outline, size: 28),
+        ),
       ),
     );
   }
@@ -200,8 +294,7 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
                   onChanged: (value) {
                     setState(() {
                       searchQuery = value.toLowerCase();
-                      currentPage = 1;
-                      _updateDisplayedPredictions();
+                      _resetPagination();
                     });
                   },
                 ),
@@ -216,10 +309,10 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
                 icon: Icon(
                   showFilters ? Icons.filter_list_off : Icons.filter_list,
                   color: showFilters
-                      ? Theme.of(context).primaryColor
+                      ? PredictionsScreen._selectedFilterColor
                       : (Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white60
-                          : Colors.grey[600]),
+                          ? PredictionsScreen._unselectedFilterColorDark
+                          : PredictionsScreen._unselectedFilterColorLight),
                 ),
               ),
             ],
@@ -261,8 +354,7 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
                     onSelected: (selected) {
                       setState(() {
                         selectedConfidence = null;
-                        currentPage = 1;
-                        _updateDisplayedPredictions();
+                        _resetPagination();
                       });
                     },
                   ),
@@ -279,8 +371,7 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
                       onSelected: (selected) {
                         setState(() {
                           selectedConfidence = selected ? confidence : null;
-                          currentPage = 1;
-                          _updateDisplayedPredictions();
+                          _resetPagination();
                         });
                       },
                     );
@@ -306,8 +397,7 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
               onChanged: (value) {
                 setState(() {
                   showOnlyUrgent = value;
-                  currentPage = 1;
-                  _updateDisplayedPredictions();
+                  _resetPagination();
                 });
               },
             ),
@@ -328,7 +418,7 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
     );
   }
 
-  Widget _buildList() {
+  Widget _buildList(List<StockPrediction> displayedPredictions) {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth > 900) {
@@ -340,48 +430,40 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
             ),
-            itemCount: _displayedPredictions.length,
+            itemCount: displayedPredictions.length,
             itemBuilder: (context, index) => _buildPredictionCard(
-                _displayedPredictions[index],
+                displayedPredictions[index],
                 isCompact: true),
           );
         } else {
           return ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: _displayedPredictions.length,
+            itemCount: displayedPredictions.length,
             itemBuilder: (context, index) =>
-                _buildPredictionCard(_displayedPredictions[index]),
+                _buildPredictionCard(displayedPredictions[index]),
           );
         }
       },
     );
   }
 
-  Widget _buildPaginationControls() {
-    final totalPages = (_allPredictions
-                .where((p) =>
-                    (searchQuery.isEmpty ||
-                        p.itemName.toLowerCase().contains(searchQuery)) &&
-                    (selectedConfidence == null ||
-                        p.confidence == selectedConfidence) &&
-                    (!showOnlyUrgent || p.daysLeft <= 7))
-                .length /
-            pageSize)
-        .ceil();
+  Widget _buildPaginationControls(
+      List<StockPrediction> filtered, int totalPages) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           ElevatedButton(
-            onPressed: currentPage > 1 ? _prevPage : null,
+            onPressed: _currentPage > 1 ? _prevPage : null,
             child: const Text('Prev'),
           ),
           const SizedBox(width: 12),
-          Text('Page $currentPage of $totalPages'),
+          Text('Page $_currentPage of $totalPages'),
           const SizedBox(width: 12),
           ElevatedButton(
-            onPressed: currentPage < totalPages ? _nextPage : null,
+            onPressed:
+                _currentPage < totalPages ? () => _nextPage(totalPages) : null,
             child: const Text('Next'),
           ),
         ],
@@ -402,7 +484,7 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
           Text(error, style: GoogleFonts.poppins(color: Colors.grey[600])),
           const SizedBox(height: 16),
           ElevatedButton(
-            onPressed: _fetchPredictionsWithFallback,
+            onPressed: _loadRealPredictions,
             child: const Text('Retry'),
           ),
         ],
@@ -496,6 +578,10 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
       stockPercent = 1.0; // Excellent level
     }
 
+    final daysLabel = prediction.currentQuantity <= 0
+        ? 'Out of stock'
+        : CustomDateUtils.DateUtils.formatDaysDifference(prediction.daysLeft);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
@@ -526,7 +612,7 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                                color: urgencyColor.withOpacity(0.1),
+                                color: urgencyColor.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12)),
                             child: Text(urgencyText,
                                 style: GoogleFonts.poppins(
@@ -539,7 +625,7 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                                color: confidenceColor.withOpacity(0.1),
+                                color: confidenceColor.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12)),
                             child: Text(
                                 _getConfidenceLabel(prediction.confidence),
@@ -560,7 +646,7 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
                       children: [
                         Icon(urgencyIcon, color: urgencyColor, size: 20),
                         const SizedBox(width: 4),
-                        Text('${prediction.daysLeft} days',
+                        Text(daysLabel,
                             style: GoogleFonts.poppins(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -602,28 +688,6 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
     }
   }
 
-  // Generate 35–40 demo predictions
-  List<StockPrediction> _generateDemoData() {
-    final List<StockPrediction> list = [];
-    final now = DateTime.now();
-    for (int i = 1; i <= 100; i++) {
-      final daysLeft = (i % 30) + 1;
-      final confidence = PredictionConfidence.values[i % 3];
-      list.add(StockPrediction(
-        itemId: i.toString(),
-        itemName: 'Demo Item ${i + 1}',
-        currentQuantity: 10 + (i * 2),
-        averageDailyUsage: 1.0 + (i % 5),
-        daysLeft: daysLeft,
-        predictedDepletionDate: now.add(Duration(days: daysLeft)),
-        needsRestock: daysLeft <= 7,
-        confidence: confidence,
-        calculatedAt: now.subtract(Duration(hours: i % 24)),
-      ));
-    }
-    return list;
-  }
-
   void _showStatusInterpretationDialog() {
     showDialog(
       context: context,
@@ -634,12 +698,18 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF2196F3)
+                        .withValues(alpha: 0.15) // Blue tint in dark mode
+                    : const Color(0xFF1976D2)
+                        .withValues(alpha: 0.1), // Blue tint in light mode
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
                 Icons.help_outline,
-                color: Theme.of(context).primaryColor,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF2196F3) // Bright blue in dark mode
+                    : const Color(0xFF1976D2), // Deep blue in light mode
                 size: 24,
               ),
             ),
@@ -713,10 +783,12 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor.withOpacity(0.1),
+                    color:
+                        Theme.of(context).primaryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: Theme.of(context).primaryColor.withOpacity(0.3),
+                      color:
+                          Theme.of(context).primaryColor.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Column(

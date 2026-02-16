@@ -15,6 +15,8 @@ import '../widgets/stat_card.dart';
 import '../widgets/quick_action_button.dart';
 import '../widgets/expiry_alert_card.dart';
 import '../widgets/welcome_card.dart';
+import '../services/notification_service.dart';
+import '../utils/date_utils.dart' as CustomDateUtils;
 import 'inventory_form_screen.dart';
 import 'qr_scanner_screen.dart';
 import 'expiry_alerts_screen.dart';
@@ -29,31 +31,25 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  Map<String, dynamic>? dashboardStats;
-  Map<String, int>? _categoryStats;
-  bool _isLoadingCategory = true;
-  bool isLoading = true;
   AppUser? currentUser;
   int _touchedStockIndex = -1;
   int _touchedCategoryIndex = -1;
 
   // late Future<void> _dashboardFuture;
-  late Future<List<Map<String, dynamic>>> _monthlyDataFuture;
-  late Future<Map<String, dynamic>> _dashboardStatsFuture;
-  late Future<Map<String, dynamic>> _categoryStatsFuture;
-  late Future<Map<String, int>> _expirySummaryFuture;
+  late Stream<List<Map<String, dynamic>>> _monthlyDataStream;
+  late Stream<Map<String, dynamic>> _dashboardStatsStream;
+  late Stream<Map<String, int>> _categoryStatsStream;
+  late Stream<Map<String, int>> _expirySummaryStream;
 
   @override
   void initState() {
     super.initState();
     _loadCurrentUser();
-    _loadDashboardData();
-    _loadCategoryStats();
     // _dashboardFuture = _loadDashboardData();
-    _expirySummaryFuture = ExpiryNotificationService.getExpirySummary();
-    _dashboardStatsFuture = InventoryService.getDashboardStats();
-    _monthlyDataFuture = InventoryService.getMonthlyMovementTrends();
-    _categoryStatsFuture = InventoryService.getCategoryStats();
+    _expirySummaryStream = ExpiryNotificationService.getExpirySummaryStream();
+    _dashboardStatsStream = InventoryService.getDashboardStatsStream();
+    _monthlyDataStream = InventoryService.getMonthlyMovementTrendsStream();
+    _categoryStatsStream = InventoryService.getCategoryStatsStream();
   }
 
   void _loadCurrentUser() {
@@ -70,45 +66,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  Future<void> _loadDashboardData() async {
+  Future<void> _refreshDashboard() async {
+    // Since we're using streams, we don't need to manually refresh
+    // The streams will automatically update when data changes
+    // This method is kept for the RefreshIndicator compatibility
     setState(() {
-      isLoading = true;
+      // Force a rebuild to refresh streams if needed
     });
+  }
 
+  // Test Gmail connection
+  Future<void> _testGmailConnection() async {
     try {
-      // Only load real data from Firebase
-      final stats = await InventoryService.getDashboardStats();
-
+      final result = await NotificationService.testGmailConnection();
       if (mounted) {
-        setState(() {
-          dashboardStats = stats;
-          isLoading = false;
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message']),
+            duration: const Duration(seconds: 5),
+            backgroundColor: result['success'] ? Colors.green : Colors.red,
+          ),
+        );
       }
     } catch (e) {
-      debugPrint('Failed to load dashboard data: $e');
       if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Test failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
 
-  Future<void> _refreshDashboard() async {
-    setState(() {
-      isLoading = true;
-    });
-    // Re-run the same logic used in init to refresh the screen safely.
-    await _loadDashboardData();
-  }
-
-  Future<void> _loadCategoryStats() async {
-    final stats = await InventoryService.getCategoryStats();
-    setState(() {
-      _categoryStats = stats;
-      _isLoadingCategory = false;
-    });
+  // Send test notification
+  Future<void> _sendTestNotification() async {
+    try {
+      final result = await NotificationService.testNotifications();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Email: ${result['emailSent'] ? 'Sent' : 'Failed'}, '
+                // 'SMS: ${result['smsSent'] ? 'Sent' : 'Failed'}'
+                ),
+            duration: const Duration(seconds: 5),
+            backgroundColor: (result['emailSent'] || result['smsSent'])
+                ? Colors.green
+                : Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Test notification failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -117,38 +135,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: Theme.of(context).brightness == Brightness.dark
           ? Theme.of(context).scaffoldBackgroundColor
           : Colors.grey[50],
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _refreshDashboard,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16.0),
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Welcome Section
-                    _buildWelcomeCard(),
-                    const SizedBox(height: 20),
+      body: RefreshIndicator(
+        onRefresh: _refreshDashboard,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Welcome Section
+              _buildWelcomeCard(),
+              const SizedBox(height: 20),
 
-                    // Statistics Cards
-                    _buildStatisticsGrid(),
-                    const SizedBox(height: 20),
+              // Statistics Cards
+              _buildStatisticsGrid(),
+              const SizedBox(height: 20),
 
-                    // Quick Actions
-                    _buildQuickActions(),
-                    const SizedBox(height: 20),
+              // Quick Actions
+              _buildQuickActions(),
+              const SizedBox(height: 20),
 
-                    // Expiry Notifications
-                    _buildExpiryNotifications(),
-                    const SizedBox(height: 20),
+              // Test Email Section (temporary for testing)
+              // _buildTestSection(),
+              // const SizedBox(height: 20),
 
-                    // Recent Activity or Chart
-                    _buildActivitySection(),
-                  ],
-                ),
-              ),
-            ),
+              // Expiry Notifications
+              _buildExpiryNotifications(),
+              const SizedBox(height: 20),
+
+              // Recent Activity or Chart
+              _buildActivitySection(),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -169,7 +189,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       height: 60,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white.withOpacity(0.2),
+        color: Colors.white.withValues(alpha: 0.2),
       ),
       child: Center(
         child: Text(
@@ -200,13 +220,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ? Colors.grey.withValues(alpha: 0.3)
                     : Colors.grey.withValues(alpha: 0.1)),
             backgroundImage: MemoryImage(bytes),
-            onBackgroundImageError: (exception, stackTrace) {
-              debugPrint('Error loading user profile image: $exception');
-            },
+            onBackgroundImageError: (exception, stackTrace) {},
           );
-        } catch (e) {
-          debugPrint('Error decoding base64 profile image: $e');
-        }
+        } catch (e) {}
       } else {
         // Handle network URLs
         return CircleAvatar(
@@ -218,22 +234,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ? Colors.grey.withValues(alpha: 0.3)
                   : Colors.grey.withValues(alpha: 0.1)),
           backgroundImage: NetworkImage(user.profilePhotoPath!),
-          onBackgroundImageError: (exception, stackTrace) {
-            debugPrint('Error loading network profile image: $exception');
-          },
+          onBackgroundImageError: (exception, stackTrace) {},
         );
       }
     }
 
     // Fallback to initials
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return CircleAvatar(
-      backgroundColor: user?.isActive == true
-          ? (Theme.of(context).brightness == Brightness.dark
-              ? Theme.of(context).primaryColor.withValues(alpha: 0.2)
-              : Theme.of(context).primaryColor.withValues(alpha: 0.1))
-          : (Theme.of(context).brightness == Brightness.dark
-              ? Colors.grey.withValues(alpha: 0.3)
-              : Colors.grey.withValues(alpha: 0.1)),
+      // Use the same soft white tint as the theme toggle for consistency
+      backgroundColor: Colors.white.withValues(alpha: 0.2),
       child: Text(
         user?.displayName.isNotEmpty == true
             ? user.displayName[0].toUpperCase()
@@ -241,12 +251,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         style: GoogleFonts.poppins(
           fontWeight: FontWeight.w600,
           color: user?.isActive == true
-              ? (Theme.of(context).brightness == Brightness.dark
-                  ? Theme.of(context).primaryColor
-                  : Theme.of(context).primaryColor)
-              : (Theme.of(context).brightness == Brightness.dark
-                  ? Colors.grey[400]
-                  : Colors.grey[600]),
+              ? (isDark ? Colors.white : Theme.of(context).primaryColor)
+              : (isDark ? Colors.white70 : Colors.grey[700]),
         ),
       ),
     );
@@ -311,69 +317,89 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Responsive statistics grid.
   /// Ensures at least 2 columns on small screens (prevents vertical-only stacking).
   Widget _buildStatisticsGrid() {
-    if (dashboardStats == null) {
-      return const SizedBox(
-        height: 200,
-        child: Center(child: Text('No data available')),
-      );
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Minimum 2 columns on small devices, grow to 4 on wide screens
-        int crossAxisCount;
-        double childAspectRatio;
-
-        if (constraints.maxWidth < 400) {
-          crossAxisCount = 2;
-          childAspectRatio = 1.2;
-        } else if (constraints.maxWidth < 600) {
-          crossAxisCount = 2;
-          childAspectRatio = 1.3;
-        } else if (constraints.maxWidth < 900) {
-          crossAxisCount = 3;
-          childAspectRatio = 1.4;
-        } else {
-          crossAxisCount = 4;
-          childAspectRatio = 1.2;
+    return StreamBuilder<Map<String, dynamic>>(
+      stream: _dashboardStatsStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 200,
+            child: Center(child: CircularProgressIndicator()),
+          );
         }
 
-        // Single GridView with all four stat cards. This prevents odd double-grid layout and
-        // ensures responsive columns across breakpoints.
-        return GridView.count(
-          crossAxisCount: crossAxisCount,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: childAspectRatio,
-          children: [
-            _buildStatCard(
-              'Total Items',
-              _formatLargeNumber(dashboardStats!['totalItems'].toDouble()),
-              Icons.inventory_2,
-              Colors.blue,
-            ),
-            _buildStatCard(
-              'Total Value',
-              // Format as currency with proper formatting
-              _formatCurrency(dashboardStats!['totalValue']),
-              Icons.attach_money,
-              Colors.green,
-            ),
-            _buildStatCard(
-              'Low Stock',
-              _formatLargeNumber(dashboardStats!['lowStockItems'].toDouble()),
-              Icons.warning,
-              Colors.orange,
-            ),
-            _buildStatCard(
-              'Out of Stock',
-              _formatLargeNumber(dashboardStats!['outOfStockItems'].toDouble()),
-              Icons.error,
-              Colors.red,
-            ),
-          ],
+        if (snapshot.hasError || !snapshot.hasData) {
+          return const SizedBox(
+            height: 200,
+            child: Center(child: Text('No data available')),
+          );
+        }
+
+        final dashboardStats = snapshot.data!;
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            // Minimum 2 columns on small devices, grow to 4 on wide screens
+            int crossAxisCount;
+            double childAspectRatio;
+
+            if (constraints.maxWidth < 400) {
+              crossAxisCount = 2;
+              childAspectRatio = 1.2;
+            } else if (constraints.maxWidth < 600) {
+              crossAxisCount = 2;
+              childAspectRatio = 1.3;
+            } else if (constraints.maxWidth < 900) {
+              crossAxisCount = 3;
+              childAspectRatio = 1.4;
+            } else {
+              crossAxisCount = 4;
+              childAspectRatio = 1.2;
+            }
+
+            // Single GridView with all four stat cards. This prevents odd double-grid layout and
+            // ensures responsive columns across breakpoints.
+            return GridView.count(
+              crossAxisCount: crossAxisCount,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: childAspectRatio,
+              children: [
+                _buildStatCard(
+                  'Total Items',
+                  _formatLargeNumber(dashboardStats['totalItems'].toDouble()),
+                  Icons.inventory_2,
+                  Colors.blue,
+                  dashboardStats,
+                ),
+                _buildStatCard(
+                  'Total Value',
+                  // Format as currency with proper formatting
+                  _formatCurrency(dashboardStats['totalValue']),
+                  Icons.attach_money,
+                  Colors.green,
+                  dashboardStats,
+                ),
+                _buildStatCard(
+                  'Low Stock',
+                  _formatLargeNumber(
+                      dashboardStats['lowStockItems'].toDouble()),
+                  Icons.warning,
+                  Colors.orange,
+                  dashboardStats,
+                ),
+                _buildStatCard(
+                  'Out of Stock',
+                  _formatLargeNumber(
+                      dashboardStats['outOfStockItems'].toDouble()),
+                  Icons.error,
+                  Colors.red,
+                  dashboardStats,
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -478,9 +504,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String value,
     IconData icon,
     Color color,
+    Map<String, dynamic> dashboardStats,
   ) {
-    final trendData =
-        _generateTrendData(_getCurrentValueForChart(title), 7, 0.8, 1.2);
+    final trendData = _generateTrendData(
+        _getCurrentValueForChart(title, dashboardStats), 7, 0.8, 1.2);
 
     // Get the full formatted value for tooltip
     String fullValue = value;
@@ -490,18 +517,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         symbol: '\$',
         decimalDigits: 2,
       );
-      fullValue = formatter.format(dashboardStats!['totalValue']);
+      fullValue = formatter.format(dashboardStats['totalValue']);
     } else if (title == 'Total Items') {
       // Show integer value only for Total Items tooltip
-      fullValue = (dashboardStats!['totalItems'] as int).toString();
+      fullValue = (dashboardStats['totalItems'] as int).toString();
     } else if (title == 'Low Stock') {
-      fullValue = _getFullFormattedValue(dashboardStats!['lowStockItems']);
+      fullValue = _getFullFormattedValue(dashboardStats['lowStockItems']);
     } else if (title == 'Out of Stock') {
-      fullValue = _getFullFormattedValue(dashboardStats!['outOfStockItems']);
+      fullValue = _getFullFormattedValue(dashboardStats['outOfStockItems']);
     }
 
+    // Make tooltip more responsive - shorter on small screens
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 400;
+    final tooltipMessage = isSmallScreen ? fullValue : '$title: $fullValue';
+
     return Tooltip(
-      message: '$title: $fullValue',
+      message: tooltipMessage,
       child: StatCard(
         title: title,
         value: value,
@@ -512,82 +544,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildMiniChart(String title, Color color) {
-    // Generate trend data based on current stats to show realistic progression
-    List<double> trendData;
-    final currentValue = _getCurrentValueForChart(title);
-
-    // Create a realistic trend leading to current value
+  double _getCurrentValueForChart(
+      String title, Map<String, dynamic> dashboardStats) {
     switch (title) {
       case 'Total Items':
-        trendData = _generateTrendData(currentValue, 7, 0.8, 1.2);
-        break;
+        return (dashboardStats['totalItems'] ?? 0).toDouble();
       case 'Total Value':
-        trendData = _generateTrendData(currentValue, 7, 0.7, 1.3);
-        break;
+        return (dashboardStats['totalValue'] ?? 0).toDouble();
       case 'Low Stock':
-        trendData = _generateTrendData(currentValue, 7, 0.5, 2.0);
-        break;
+        return (dashboardStats['lowStockItems'] ?? 0).toDouble();
       case 'Out of Stock':
-        trendData = _generateTrendData(currentValue, 7, 0.0, 3.0);
-        break;
-      default:
-        trendData = _generateTrendData(currentValue, 7, 0.8, 1.2);
-    }
-
-    if (trendData.isEmpty || trendData.every((element) => element == 0)) {
-      return Container(
-        height: 30,
-        alignment: Alignment.center,
-        child: Text(
-          'No trend data',
-          style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey[500]),
-        ),
-      );
-    }
-
-    return SizedBox(
-      height: 30,
-      child: LineChart(
-        LineChartData(
-          gridData: FlGridData(show: false),
-          titlesData: FlTitlesData(show: false),
-          borderData: FlBorderData(show: false),
-          lineBarsData: [
-            LineChartBarData(
-              spots: trendData.asMap().entries.map((entry) {
-                return FlSpot(entry.key.toDouble(), entry.value);
-              }).toList(),
-              isCurved: true,
-              color: color,
-              barWidth: 2,
-              isStrokeCapRound: true,
-              dotData: FlDotData(show: false),
-              belowBarData: BarAreaData(
-                show: true,
-                color: color.withValues(alpha: 0.1),
-              ),
-            ),
-          ],
-          minY: trendData.reduce((a, b) => a < b ? a : b) * 0.8,
-          maxY: trendData.reduce((a, b) => a > b ? a : b) * 1.2,
-        ),
-      ),
-    );
-  }
-
-  double _getCurrentValueForChart(String title) {
-    if (dashboardStats == null) return 0;
-
-    switch (title) {
-      case 'Total Items':
-        return (dashboardStats!['totalItems'] ?? 0).toDouble();
-      case 'Total Value':
-        return (dashboardStats!['totalValue'] ?? 0).toDouble();
-      case 'Low Stock':
-        return (dashboardStats!['lowStockItems'] ?? 0).toDouble();
-      case 'Out of Stock':
-        return (dashboardStats!['outOfStockItems'] ?? 0).toDouble();
+        return (dashboardStats['outOfStockItems'] ?? 0).toDouble();
       default:
         return 0;
     }
@@ -634,6 +601,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
         const SizedBox(height: 12),
+        // // Debug button to add test perishable items
+        // if (currentUser?.isAdmin == true) ...[
+        //   Card(
+        //     elevation: 2,
+        //     shape: RoundedRectangleBorder(
+        //       borderRadius: BorderRadius.circular(12),
+        //     ),
+        //     child: InkWell(
+        //       onTap: _addTestPerishableItems,
+        //       borderRadius: BorderRadius.circular(12),
+        //       child: Padding(
+        //         padding: const EdgeInsets.all(12),
+        //         child: Row(
+        //           children: [
+        //             Container(
+        //               padding: const EdgeInsets.all(8),
+        //               decoration: BoxDecoration(
+        //                 color: Colors.orange.withValues(alpha: 0.1),
+        //                 borderRadius: BorderRadius.circular(8),
+        //               ),
+        //               child: const Icon(
+        //                 Icons.add_circle,
+        //                 color: Colors.orange,
+        //                 size: 20,
+        //               ),
+        //             ),
+        //             const SizedBox(width: 12),
+        //             Expanded(
+        //               child: Text(
+        //                 'Add Test Perishable Items (Debug)',
+        //                 style: GoogleFonts.poppins(
+        //                   fontSize: 14,
+        //                   fontWeight: FontWeight.w500,
+        //                   color: Theme.of(context).brightness == Brightness.dark
+        //                       ? Colors.white70
+        //                       : Colors.grey[700],
+        //                 ),
+        //               ),
+        //             ),
+        //           ],
+        //         ),
+        //       ),
+        //     ),
+        //   ),
+        // const SizedBox(height: 12),
+        // ],
         LayoutBuilder(
           builder: (context, constraints) {
             // Create list of all quick actions
@@ -711,6 +724,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildResponsiveGrid(List<Widget> actions, int crossAxisCount) {
+    // Make cards rectangular (taller than wide) for better appearance
+    double childAspectRatio;
+    if (crossAxisCount >= 3) {
+      childAspectRatio = 1.4; // Large screens - taller rectangles
+    } else {
+      childAspectRatio = 1.2; // Small/medium screens - taller rectangles
+    }
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -718,8 +739,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisCount: crossAxisCount,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        childAspectRatio:
-            1.1, // Slightly taller than square for better text fit
+        childAspectRatio: childAspectRatio,
       ),
       itemCount: actions.length,
       itemBuilder: (context, index) => actions[index],
@@ -739,6 +759,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onTap: onTap,
     );
   }
+
+  // Widget _buildTestSection() {
+  //   // Only show test section for admin users
+  //   if (currentUser?.isAdmin != true) return const SizedBox.shrink();
+
+  //   return Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: [
+  //       Text(
+  //         'Email Testing (Admin Only)',
+  //         style: GoogleFonts.poppins(
+  //           fontSize: 18,
+  //           fontWeight: FontWeight.w600,
+  //           color: Theme.of(context).brightness == Brightness.dark
+  //               ? Colors.white
+  //               : Colors.grey[800],
+  //         ),
+  //       ),
+  //       const SizedBox(height: 12),
+  //       Row(
+  //         children: [
+  //           Expanded(
+  //             child: ElevatedButton.icon(
+  //               onPressed: _testGmailConnection,
+  //               icon: const Icon(Icons.email),
+  //               label: const Text('Test Gmail Connection'),
+  //               style: ElevatedButton.styleFrom(
+  //                 backgroundColor: Colors.blue,
+  //                 foregroundColor: Colors.white,
+  //                 padding: const EdgeInsets.symmetric(vertical: 12),
+  //               ),
+  //             ),
+  //           ),
+  //           const SizedBox(width: 12),
+  //           Expanded(
+  //             child: ElevatedButton.icon(
+  //               onPressed: _sendTestNotification,
+  //               icon: const Icon(Icons.send),
+  //               label: const Text('Send Test Email'),
+  //               style: ElevatedButton.styleFrom(
+  //                 backgroundColor: Colors.green,
+  //                 foregroundColor: Colors.white,
+  //                 padding: const EdgeInsets.symmetric(vertical: 12),
+  //               ),
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //     ],
+  //   );
+  // }
 
   Widget _buildExpiryNotifications() {
     return Column(
@@ -771,8 +842,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        FutureBuilder<Map<String, int>>(
-          future: _expirySummaryFuture,
+        StreamBuilder<Map<String, int>>(
+          stream: _expirySummaryStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return Card(
@@ -799,7 +870,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Text(
                       'Error loading expiry data',
                       style: GoogleFonts.poppins(
-                        color: Colors.grey[600],
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white60
+                            : Colors.grey[600],
                         fontSize: 14,
                       ),
                     ),
@@ -831,7 +904,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.1),
+                          color: Colors.green.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -857,7 +930,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               'No items are expiring soon',
                               style: GoogleFonts.poppins(
                                 fontSize: 14,
-                                color: Colors.grey[600],
+                                color: Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.white60
+                                    : Colors.grey[600],
                               ),
                             ),
                           ],
@@ -950,9 +1026,103 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // Future<void> _addTestPerishableItems() async {
+  //   try {
+  //     final now = DateTime.now();
+
+  //     // Create test items with different expiry scenarios
+  //     final testItems = [
+  //       InventoryItem(
+  //         id: '',
+  //         name: 'Milk',
+  //         description: 'Fresh dairy milk',
+  //         category: 'Food & Beverages',
+  //         quantity: 10,
+  //         unitPrice: 2.50,
+  //         supplier: 'Local Dairy',
+  //         createdAt: now,
+  //         updatedAt: now,
+  //         reorderLevel: 5,
+  //         isPerishable: true,
+  //         expiryDate: now.add(const Duration(days: 5)), // Expires in 5 days
+  //       ),
+  //       InventoryItem(
+  //         id: '',
+  //         name: 'Bread',
+  //         description: 'Whole grain bread',
+  //         category: 'Food & Beverages',
+  //         quantity: 15,
+  //         unitPrice: 3.00,
+  //         supplier: 'Bakery Co',
+  //         createdAt: now,
+  //         updatedAt: now,
+  //         reorderLevel: 8,
+  //         isPerishable: true,
+  //         expiryDate: now.subtract(const Duration(days: 2)), // Already expired
+  //       ),
+  //       InventoryItem(
+  //         id: '',
+  //         name: 'Cheese',
+  //         description: 'Aged cheddar cheese',
+  //         category: 'Food & Beverages',
+  //         quantity: 8,
+  //         unitPrice: 8.50,
+  //         supplier: 'Cheese Factory',
+  //         createdAt: now,
+  //         updatedAt: now,
+  //         reorderLevel: 3,
+  //         isPerishable: true,
+  //         expiryDate: now.add(const Duration(days: 25)), // Expires in 25 days
+  //       ),
+  //       InventoryItem(
+  //         id: '',
+  //         name: 'Yogurt',
+  //         description: 'Greek yogurt',
+  //         category: 'Food & Beverages',
+  //         quantity: 12,
+  //         unitPrice: 1.75,
+  //         supplier: 'Dairy Farms',
+  //         createdAt: now,
+  //         updatedAt: now,
+  //         reorderLevel: 6,
+  //         isPerishable: true,
+  //         expiryDate: now.add(const Duration(days: 90)), // Expires in 90 days
+  //       ),
+  //     ];
+
+  //     for (final item in testItems) {
+  //       await InventoryService.addInventoryItem(item);
+  //     }
+
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(
+  //           content: Text('Added 4 test perishable items for expiry testing'),
+  //           backgroundColor: Colors.green,
+  //         ),
+  //       );
+  //     }
+  //   } catch (e) {
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text('Error adding test items: $e'),
+  //           backgroundColor: Colors.red,
+  //         ),
+  //       );
+  //     }
+  //   }
+  // }
+
   void _showExpiryItemsDialog(ExpiryPriority priority) {
     String title;
     Future<List<InventoryItem>> future;
+
+    final mediaQuery = MediaQuery.of(context);
+    final clampedTextScaler =
+        mediaQuery.textScaler.clamp(minScaleFactor: 1.0, maxScaleFactor: 1.2);
+    final dialogMaxHeight = mediaQuery.size.height * 0.7;
+    final dialogMaxWidth = mediaQuery.size.width * 0.95;
 
     switch (priority) {
       case ExpiryPriority.expired:
@@ -962,6 +1132,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case ExpiryPriority.high:
         title = 'Items Expiring Soon';
         future = ExpiryNotificationService.getItemsExpiringSoon();
+        break;
+      case ExpiryPriority.medium:
+        title = 'Needs Immediate Attention';
+        future = ExpiryNotificationService.getItemsNeedingImmediateAttention();
         break;
       case ExpiryPriority.low:
         title = 'Items Expiring Within 6 Months';
@@ -974,93 +1148,162 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          title,
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 300,
-          child: FutureBuilder<List<InventoryItem>>(
-            future: future,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
 
-              if (snapshot.hasError) {
-                return Center(
-                  child: Text(
-                    'Error loading items',
-                    style: GoogleFonts.poppins(color: Colors.grey[600]),
-                  ),
-                );
-              }
+        return MediaQuery(
+          data: mediaQuery.copyWith(textScaler: clampedTextScaler),
+          child: AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            title: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w700,
+                fontSize: 20,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            content: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: dialogMaxWidth,
+                maxHeight: dialogMaxHeight,
+                minHeight: 200,
+              ),
+              child: FutureBuilder<List<InventoryItem>>(
+                future: future,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-              final items = snapshot.data ?? [];
-
-              if (items.isEmpty) {
-                return Center(
-                  child: Text(
-                    'No items found',
-                    style: GoogleFonts.poppins(color: Colors.grey[600]),
-                  ),
-                );
-              }
-
-              return ListView.builder(
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final item = items[index];
-                  final daysUntilExpiry = item.daysUntilExpiry ?? 0;
-
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: _getExpiryColor(daysUntilExpiry)
-                          .withValues(alpha: 0.1),
-                      child: Icon(
-                        _getExpiryIcon(daysUntilExpiry),
-                        color: _getExpiryColor(daysUntilExpiry),
-                        size: 20,
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Error loading items',
+                        style: GoogleFonts.poppins(
+                          color:
+                              isDark ? Colors.white60 : Colors.grey.shade600,
+                        ),
                       ),
-                    ),
-                    title: Text(
-                      item.name,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                    );
+                  }
+
+                  final items = snapshot.data ?? [];
+
+                  if (items.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No items found',
+                        style: GoogleFonts.poppins(
+                          color:
+                              isDark ? Colors.white60 : Colors.grey.shade600,
+                        ),
                       ),
-                    ),
-                    subtitle: Text(
-                      item.expiryDate != null
-                          ? 'Expires: ${DateFormat('MMM dd, yyyy').format(item.expiryDate!)}'
-                          : 'No expiry date',
-                      style: GoogleFonts.poppins(fontSize: 12),
-                    ),
-                    trailing: Text(
-                      daysUntilExpiry < 0
-                          ? '${daysUntilExpiry.abs()} days ago'
-                          : '$daysUntilExpiry days',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: _getExpiryColor(daysUntilExpiry),
-                        fontWeight: FontWeight.w500,
-                      ),
+                    );
+                  }
+
+                  return Scrollbar(
+                    radius: const Radius.circular(12),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        final daysUntilExpiry = item.daysUntilExpiry ?? 0;
+                        final statusColor = _getExpiryColor(daysUntilExpiry);
+                        final statusText = CustomDateUtils.DateUtils
+                            .formatExpiryStatus(daysUntilExpiry);
+
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: statusColor.withValues(alpha: 0.12),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _getExpiryIcon(daysUntilExpiry),
+                                color: statusColor,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.name,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.grey.shade900,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    item.expiryDate != null
+                                        ? 'Expires: ${DateFormat('MMM dd, yyyy').format(item.expiryDate!)}'
+                                        : 'No expiry date',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12.5,
+                                      color: isDark
+                                          ? Colors.white70
+                                          : Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: dialogMaxWidth * 0.35,
+                              ),
+                              child: Text(
+                                statusText,
+                                textAlign: TextAlign.right,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: statusColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   );
                 },
-              );
-            },
+              ),
+            ),
+            actionsPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  'Close',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).primaryColor,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1121,7 +1364,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       SizedBox(
                         width: double.infinity,
-                        height: 200,
+                        height: 300,
                         child: Stack(
                           children: [
                             _buildStockChart(),
@@ -1138,7 +1381,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // For larger screens, keep side-by-side layout
                   return SizedBox(
                     width: double.infinity,
-                    height: 250,
+                    height: 350,
                     child: Row(
                       children: [
                         Expanded(
@@ -1263,154 +1506,134 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildStockChart() {
-    if (dashboardStats == null) return const Center(child: Text('No data'));
+    return StreamBuilder<Map<String, dynamic>>(
+      stream: _dashboardStatsStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    final totalItems = dashboardStats!['totalItems'] as int;
-    final lowStockItems = dashboardStats!['lowStockItems'] as int;
-    final outOfStockItems = dashboardStats!['outOfStockItems'] as int;
-    final normalStock = (totalItems - lowStockItems - outOfStockItems).clamp(
-      0,
-      totalItems,
-    );
+        if (snapshot.hasError || !snapshot.hasData) {
+          return const Center(child: Text('No data'));
+        }
 
-    if (totalItems == 0) {
-      return const Center(child: Text('No inventory items'));
-    }
+        final dashboardStats = snapshot.data!;
+        final totalItems = dashboardStats['totalItems'] as int;
+        final lowStockItems = dashboardStats['lowStockItems'] as int;
+        final outOfStockItems = dashboardStats['outOfStockItems'] as int;
+        final normalStock =
+            (totalItems - lowStockItems - outOfStockItems).clamp(
+          0,
+          totalItems,
+        );
 
-    return PieChart(
-      PieChartData(
-        pieTouchData: PieTouchData(
-          enabled: true,
-          touchCallback: (FlTouchEvent event, pieTouchResponse) {
-            setState(() {
-              if (!event.isInterestedForInteractions ||
-                  pieTouchResponse == null ||
-                  pieTouchResponse.touchedSection == null) {
-                _touchedStockIndex = -1;
-                return;
-              }
-              _touchedStockIndex =
-                  pieTouchResponse.touchedSection!.touchedSectionIndex;
-            });
-          },
-        ),
-        sections: [
-          PieChartSectionData(
-            color: Colors.green,
-            value: normalStock.toDouble(),
-            title: _touchedStockIndex == 0
-                ? '$normalStock items\n(${((normalStock / totalItems) * 100).toInt()}%)'
-                : '${((normalStock / totalItems) * 100).toInt()}%',
-            titleStyle: TextStyle(
-              fontSize: _touchedStockIndex == 0 ? 10 : 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+        if (totalItems == 0) {
+          return const Center(child: Text('No inventory items'));
+        }
+
+        return PieChart(
+          PieChartData(
+            pieTouchData: PieTouchData(
+              enabled: true,
+              touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                setState(() {
+                  if (!event.isInterestedForInteractions ||
+                      pieTouchResponse == null ||
+                      pieTouchResponse.touchedSection == null) {
+                    _touchedStockIndex = -1;
+                    return;
+                  }
+                  _touchedStockIndex =
+                      pieTouchResponse.touchedSection!.touchedSectionIndex;
+                });
+              },
             ),
-            radius: _touchedStockIndex == 0 ? 90 : 80,
-            showTitle: normalStock > 0,
+            sections: [
+              PieChartSectionData(
+                color: Colors.green,
+                value: normalStock.toDouble(),
+                title: _touchedStockIndex == 0
+                    ? '$normalStock items\n(${((normalStock / totalItems) * 100).toInt()}%)'
+                    : '${((normalStock / totalItems) * 100).toInt()}%',
+                titleStyle: TextStyle(
+                  fontSize: _touchedStockIndex == 0 ? 10 : 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+                radius: _touchedStockIndex == 0 ? 90 : 80,
+                showTitle: normalStock > 0,
+              ),
+              PieChartSectionData(
+                color: Colors.orange,
+                value: lowStockItems.toDouble(),
+                title: _touchedStockIndex == 1
+                    ? '$lowStockItems items\n(${((lowStockItems / totalItems) * 100).toInt()}%)'
+                    : '${((lowStockItems / totalItems) * 100).toInt()}%',
+                titleStyle: TextStyle(
+                  fontSize: _touchedStockIndex == 1 ? 10 : 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+                radius: _touchedStockIndex == 1 ? 90 : 80,
+                showTitle: lowStockItems > 0,
+              ),
+              PieChartSectionData(
+                color: Colors.red,
+                value: outOfStockItems.toDouble(),
+                title: _touchedStockIndex == 2
+                    ? '$outOfStockItems items\n(${((outOfStockItems / totalItems) * 100).toInt()}%)'
+                    : '${((outOfStockItems / totalItems) * 100).toInt()}%',
+                titleStyle: TextStyle(
+                  fontSize: _touchedStockIndex == 2 ? 10 : 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+                radius: _touchedStockIndex == 2 ? 90 : 80,
+                showTitle: outOfStockItems > 0,
+              ),
+            ],
+            centerSpaceRadius: 40,
+            sectionsSpace: 2,
           ),
-          PieChartSectionData(
-            color: Colors.orange,
-            value: lowStockItems.toDouble(),
-            title: _touchedStockIndex == 1
-                ? '$lowStockItems items\n(${((lowStockItems / totalItems) * 100).toInt()}%)'
-                : '${((lowStockItems / totalItems) * 100).toInt()}%',
-            titleStyle: TextStyle(
-              fontSize: _touchedStockIndex == 1 ? 10 : 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-            radius: _touchedStockIndex == 1 ? 90 : 80,
-            showTitle: lowStockItems > 0,
-          ),
-          PieChartSectionData(
-            color: Colors.red,
-            value: outOfStockItems.toDouble(),
-            title: _touchedStockIndex == 2
-                ? '$outOfStockItems items\n(${((outOfStockItems / totalItems) * 100).toInt()}%)'
-                : '${((outOfStockItems / totalItems) * 100).toInt()}%',
-            titleStyle: TextStyle(
-              fontSize: _touchedStockIndex == 2 ? 10 : 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-            radius: _touchedStockIndex == 2 ? 90 : 80,
-            showTitle: outOfStockItems > 0,
-          ),
-        ],
-        centerSpaceRadius: 40,
-        sectionsSpace: 2,
-      ),
+        );
+      },
     );
   }
 
-  // Widget _buildStockChart() {
-  //   return FutureBuilder<Map<String, dynamic>>(
-  //     future: _dashboardStatsFuture,
-  //     builder: (context, snapshot) {
-  //       if (snapshot.connectionState == ConnectionState.waiting) {
-  //         return const Center(child: CircularProgressIndicator());
-  //       }
-
-  //       if (snapshot.hasError || !snapshot.hasData) {
-  //         return const Center(child: Text('No data available'));
-  //       }
-
-  //       final dashboardStats = snapshot.data!;
-  //       final totalItems = dashboardStats['totalItems'] ?? 0;
-  //       final lowStock = dashboardStats['lowStockItems'] ?? 0;
-  //       final outOfStock = dashboardStats['outOfStockItems'] ?? 0;
-  //       final normalStock =
-  //           (totalItems - lowStock - outOfStock).clamp(0, totalItems);
-
-  //       if (totalItems == 0) {
-  //         return const Center(child: Text('No inventory items'));
-  //       }
-
-  //       // Keep your existing PieChart implementation here exactly
-  //       return PieChart(
-  //         PieChartData(
-  //           pieTouchData: PieTouchData(
-  //             enabled: true,
-  //             touchCallback: (event, response) {
-  //               setState(() {
-  //                 _touchedCategoryIndex =
-  //                     response?.touchedSection?.touchedSectionIndex ?? -1;
-  //               });
-  //             },
-  //           ),
-  //           sections: [
-  //             // your existing sections code...
-  //           ],
-  //           centerSpaceRadius: 40,
-  //           sectionsSpace: 2,
-  //         ),
-  //       );
-  //     },
-  //   );
   // }
 
   Widget _buildChartLegend() {
-    if (dashboardStats == null) return const SizedBox();
+    return StreamBuilder<Map<String, dynamic>>(
+      stream: _dashboardStatsStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting ||
+            snapshot.hasError ||
+            !snapshot.hasData) {
+          return const SizedBox();
+        }
 
-    final totalItems = dashboardStats!['totalItems'] as int;
-    final lowStockItems = dashboardStats!['lowStockItems'] as int;
-    final outOfStockItems = dashboardStats!['outOfStockItems'] as int;
-    final normalStock = (totalItems - lowStockItems - outOfStockItems).clamp(
-      0,
-      totalItems,
-    );
+        final dashboardStats = snapshot.data!;
+        final totalItems = dashboardStats['totalItems'] as int;
+        final lowStockItems = dashboardStats['lowStockItems'] as int;
+        final outOfStockItems = dashboardStats['outOfStockItems'] as int;
+        final normalStock =
+            (totalItems - lowStockItems - outOfStockItems).clamp(
+          0,
+          totalItems,
+        );
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLegendItem('Normal Stock', normalStock, Colors.green),
-        const SizedBox(height: 8),
-        _buildLegendItem('Low Stock', lowStockItems, Colors.orange),
-        const SizedBox(height: 8),
-        _buildLegendItem('Out of Stock', outOfStockItems, Colors.red),
-      ],
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildLegendItem('Normal Stock', normalStock, Colors.green),
+            const SizedBox(height: 8),
+            _buildLegendItem('Low Stock', lowStockItems, Colors.orange),
+            const SizedBox(height: 8),
+            _buildLegendItem('Out of Stock', outOfStockItems, Colors.red),
+          ],
+        );
+      },
     );
   }
 
@@ -1458,74 +1681,84 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildStockTooltip(int index) {
-    if (dashboardStats == null) return const SizedBox();
+    return StreamBuilder<Map<String, dynamic>>(
+      stream: _dashboardStatsStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting ||
+            snapshot.hasError ||
+            !snapshot.hasData) {
+          return const SizedBox();
+        }
 
-    final totalItems = dashboardStats!['totalItems'] as int;
-    final lowStockItems = dashboardStats!['lowStockItems'] as int;
-    final outOfStockItems = dashboardStats!['outOfStockItems'] as int;
-    final normalStock =
-        (totalItems - lowStockItems - outOfStockItems).clamp(0, totalItems);
+        final dashboardStats = snapshot.data!;
+        final totalItems = dashboardStats['totalItems'] as int;
+        final lowStockItems = dashboardStats['lowStockItems'] as int;
+        final outOfStockItems = dashboardStats['outOfStockItems'] as int;
+        final normalStock =
+            (totalItems - lowStockItems - outOfStockItems).clamp(0, totalItems);
 
-    String tooltipText;
-    switch (index) {
-      case 0:
-        final percentage =
-            ((normalStock / totalItems) * 100).toStringAsFixed(1);
-        tooltipText =
-            'Normal Stock\n$normalStock items ($percentage%)\nItems with adequate stock levels';
-        break;
-      case 1:
-        final percentage =
-            ((lowStockItems / totalItems) * 100).toStringAsFixed(1);
-        tooltipText =
-            'Low Stock\n$lowStockItems items ($percentage%)\nItems requiring restocking soon';
-        break;
-      case 2:
-        final percentage =
-            ((outOfStockItems / totalItems) * 100).toStringAsFixed(1);
-        tooltipText =
-            'Out of Stock\n$outOfStockItems items ($percentage%)\nItems that need immediate attention';
-        break;
-      default:
-        return const SizedBox();
-    }
+        String tooltipText;
+        switch (index) {
+          case 0:
+            final percentage =
+                ((normalStock / totalItems) * 100).toStringAsFixed(1);
+            tooltipText =
+                'Normal Stock\n$normalStock items ($percentage%)\nItems with adequate stock levels';
+            break;
+          case 1:
+            final percentage =
+                ((lowStockItems / totalItems) * 100).toStringAsFixed(1);
+            tooltipText =
+                'Low Stock\n$lowStockItems items ($percentage%)\nItems requiring restocking soon';
+            break;
+          case 2:
+            final percentage =
+                ((outOfStockItems / totalItems) * 100).toStringAsFixed(1);
+            tooltipText =
+                'Out of Stock\n$outOfStockItems items ($percentage%)\nItems that need immediate attention';
+            break;
+          default:
+            return const SizedBox();
+        }
 
-    return Positioned(
-      top: 20,
-      right: 20,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? Colors.grey[800]!.withValues(alpha: 0.9)
-              : Colors.white.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
+        return Positioned(
+          top: 20,
+          right: 20,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.grey[800]!.withValues(alpha: 0.9)
+                  : Colors.white.withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Text(
-          tooltipText,
-          style: GoogleFonts.poppins(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white
-                : Colors.grey[800],
+            child: Text(
+              tooltipText,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : Colors.grey[800],
+              ),
+              textAlign: TextAlign.center,
+            ),
           ),
-          textAlign: TextAlign.center,
-        ),
-      ),
+        );
+      },
     );
   }
 
   Widget _buildMonthlyTrendsChart() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _monthlyDataFuture,
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _monthlyDataStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -1535,7 +1768,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           return Center(
             child: Text(
               'Error loading trends',
-              style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white60
+                    : Colors.grey[600],
+              ),
             ),
           );
         }
@@ -1546,7 +1784,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           return Center(
             child: Text(
               'No movement data available',
-              style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white60
+                    : Colors.grey[600],
+              ),
             ),
           );
         }
@@ -1660,9 +1903,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 barRods: [
                   BarChartRodData(
                     toY: (entry.value['value'] as int).toDouble(),
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.green[400]!
-                        : Theme.of(context).primaryColor,
+                    // color: Theme.of(context).brightness == Brightness.dark
+                    //     ? Colors.green[400]!
+                    //     : Theme.of(context).primaryColor,
+                    color: Colors.green,
                     width: monthlyData.length > 8 ? 15 : 20,
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(4),
@@ -1678,502 +1922,170 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  String _getCategoryTooltipText(
-      int index, Map<String, int> categoryStats, int totalItems) {
-    if (index < 0 || index >= categoryStats.length) return '';
-
-    final entries = categoryStats.entries.toList();
-    final entry = entries[index];
-    final percentage = ((entry.value / totalItems) * 100).toStringAsFixed(1);
-
-    return '${entry.key}\n${entry.value} items ($percentage%)\nCategory distribution breakdown';
-  }
-
-  // Widget _buildCategoryChart() {
-  //   if (_isLoadingCategory) {
-  //     return const Center(child: CircularProgressIndicator());
-  //   }
-
-  //   if (_categoryStats == null || _categoryStats!.isEmpty) {
-  //     return const Center(child: Text('No category data available'));
-  //   }
-
-  //   final colors = [
-  //     Colors.blue,
-  //     Colors.green,
-  //     Colors.orange,
-  //     Colors.purple,
-  //     Colors.red,
-  //     Colors.teal,
-  //     Colors.indigo,
-  //     Colors.pink,
-  //   ];
-  //   final totalItems =
-  //       _categoryStats!.values.fold<int>(0, (sum, count) => sum + count);
-
-  //   return LayoutBuilder(
-  //     builder: (context, constraints) {
-  //       final isSmallScreen = constraints.maxWidth < 500;
-
-  //       return Column(
-  //         children: [
-  //           // Pie Chart with interactive tooltips
-  //           SizedBox(
-  //             height: 400,
-  //             child: Stack(
-  //               children: [
-  //                 PieChart(
-  //                   PieChartData(
-  //                     pieTouchData: PieTouchData(
-  //                       enabled: true,
-  //                       touchCallback: (FlTouchEvent event, pieTouchResponse) {
-  //                         setState(() {
-  //                           if (!event.isInterestedForInteractions ||
-  //                               pieTouchResponse == null ||
-  //                               pieTouchResponse.touchedSection == null) {
-  //                             _touchedCategoryIndex = -1;
-  //                             return;
-  //                           }
-  //                           _touchedCategoryIndex = pieTouchResponse
-  //                               .touchedSection!.touchedSectionIndex;
-  //                         });
-  //                       },
-  //                     ),
-  //                     sections: _categoryStats!.entries.map((entry) {
-  //                       final index =
-  //                           _categoryStats!.keys.toList().indexOf(entry.key);
-  //                       final percentage =
-  //                           ((entry.value / totalItems) * 100).toInt();
-  //                       final isTouched = _touchedCategoryIndex == index;
-
-  //                       return PieChartSectionData(
-  //                         color: colors[index % colors.length],
-  //                         value: entry.value.toDouble(),
-  //                         title: isTouched
-  //                             ? '${entry.value} items\n$percentage%'
-  //                             : (percentage > 5 ? '$percentage%' : ''),
-  //                         titleStyle: TextStyle(
-  //                           fontSize: isTouched ? 10 : 12,
-  //                           fontWeight: FontWeight.bold,
-  //                           color: Colors.white,
-  //                         ),
-  //                         radius: isTouched ? 90 : 80,
-  //                         showTitle: entry.value > 0,
-  //                       );
-  //                     }).toList(),
-  //                     centerSpaceRadius: 40,
-  //                     sectionsSpace: 2,
-  //                   ),
-  //                 ),
-  //                 // Tooltip overlay for category chart
-  //                 if (_touchedCategoryIndex != -1)
-  //                   Positioned.fill(
-  //                     child: Container(
-  //                       color: Colors.transparent,
-  //                       child: Center(
-  //                         child: Container(
-  //                           padding: const EdgeInsets.all(8),
-  //                           decoration: BoxDecoration(
-  //                             color: Theme.of(context).brightness ==
-  //                                     Brightness.dark
-  //                                 ? Colors.grey[800]!.withValues(alpha: 0.9)
-  //                                 : Colors.white.withValues(alpha: 0.9),
-  //                             borderRadius: BorderRadius.circular(8),
-  //                             boxShadow: [
-  //                               BoxShadow(
-  //                                 color: Colors.black.withValues(alpha: 0.2),
-  //                                 blurRadius: 4,
-  //                                 offset: const Offset(0, 2),
-  //                               ),
-  //                             ],
-  //                           ),
-  //                           child: Text(
-  //                             _getCategoryTooltipText(_touchedCategoryIndex,
-  //                                 _categoryStats!, totalItems),
-  //                             style: GoogleFonts.poppins(
-  //                               fontSize: 12,
-  //                               fontWeight: FontWeight.w500,
-  //                               color: Theme.of(context).brightness ==
-  //                                       Brightness.dark
-  //                                   ? Colors.white
-  //                                   : Colors.grey[800],
-  //                             ),
-  //                             textAlign: TextAlign.center,
-  //                           ),
-  //                         ),
-  //                       ),
-  //                     ),
-  //                   ),
-  //               ],
-  //             ),
-  //           ),
-  //           const SizedBox(height: 20),
-  //           // Legends below the chart - improved responsive layout
-  //           Container(
-  //             constraints: BoxConstraints(
-  //               maxHeight: isSmallScreen
-  //                   ? 200
-  //                   : 150, // Limit height to prevent overflow
-  //             ),
-  //             child: SingleChildScrollView(
-  //               child: Wrap(
-  //                 spacing: isSmallScreen ? 12 : 16,
-  //                 runSpacing: isSmallScreen ? 6 : 8,
-  //                 alignment: WrapAlignment.center,
-  //                 children: _categoryStats!.entries.map((entry) {
-  //                   final index =
-  //                       _categoryStats!.keys.toList().indexOf(entry.key);
-  //                   final percentage =
-  //                       ((entry.value / totalItems) * 100).toStringAsFixed(1);
-
-  //                   return Tooltip(
-  //                     message:
-  //                         '${entry.key}: ${entry.value} items ($percentage%)',
-  //                     child: Container(
-  //                       constraints: BoxConstraints(
-  //                         maxWidth: isSmallScreen
-  //                             ? 120
-  //                             : 150, // Limit width per legend item
-  //                       ),
-  //                       child: Row(
-  //                         mainAxisSize: MainAxisSize.min,
-  //                         children: [
-  //                           Container(
-  //                             width: 12,
-  //                             height: 12,
-  //                             decoration: BoxDecoration(
-  //                               color: colors[index % colors.length],
-  //                               borderRadius: BorderRadius.circular(2),
-  //                             ),
-  //                           ),
-  //                           const SizedBox(width: 8),
-  //                           Flexible(
-  //                             child: Column(
-  //                               crossAxisAlignment: CrossAxisAlignment.start,
-  //                               mainAxisSize: MainAxisSize.min,
-  //                               children: [
-  //                                 Text(
-  //                                   entry.key,
-  //                                   style: GoogleFonts.poppins(
-  //                                     fontSize: isSmallScreen ? 11 : 12,
-  //                                     fontWeight: FontWeight.w500,
-  //                                     color: Theme.of(context).brightness ==
-  //                                             Brightness.dark
-  //                                         ? Colors.white70
-  //                                         : Colors.grey[700],
-  //                                   ),
-  //                                   overflow: TextOverflow.ellipsis,
-  //                                   maxLines: 1,
-  //                                   softWrap: false,
-  //                                 ),
-  //                                 Text(
-  //                                   '${entry.value} items',
-  //                                   style: GoogleFonts.poppins(
-  //                                     fontSize: isSmallScreen ? 11 : 12,
-  //                                     fontWeight: FontWeight.bold,
-  //                                     color: Theme.of(context).brightness ==
-  //                                             Brightness.dark
-  //                                         ? Colors.white
-  //                                         : Colors.grey[800],
-  //                                   ),
-  //                                   overflow: TextOverflow.ellipsis,
-  //                                   maxLines: 1,
-  //                                   softWrap: false,
-  //                                 ),
-  //                               ],
-  //                             ),
-  //                           ),
-  //                         ],
-  //                       ),
-  //                     ),
-  //                   );
-  //                 }).toList(),
-  //               ),
-  //             ),
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
-
-  // Widget _buildCategoryPieChart() {
-  //   if (_isLoadingCategory) {
-  //     return const Center(child: CircularProgressIndicator());
-  //   }
-
-  //   if (_categoryStats == null || _categoryStats!.isEmpty) {
-  //     return const Center(child: Text('No category data available'));
-  //   }
-
-  //   final colors = [
-  //     Colors.blue,
-  //     Colors.green,
-  //     Colors.orange,
-  //     Colors.purple,
-  //     Colors.red,
-  //     Colors.teal,
-  //     Colors.indigo,
-  //     Colors.pink,
-  //   ];
-
-  //   final totalItems =
-  //       _categoryStats!.values.fold<int>(0, (sum, count) => sum + count);
-
-  //   return PieChart(
-  //     PieChartData(
-  //       pieTouchData: PieTouchData(
-  //         enabled: true,
-  //         touchCallback: (FlTouchEvent event, pieTouchResponse) {
-  //           // Update the index WITHOUT calling setState to prevent dashboard refresh
-  //           setState(() {
-  //             if (!event.isInterestedForInteractions ||
-  //                 pieTouchResponse == null ||
-  //                 pieTouchResponse.touchedSection == null) {
-  //               _touchedCategoryIndex = -1;
-  //             } else {
-  //               _touchedCategoryIndex =
-  //                   pieTouchResponse.touchedSection!.touchedSectionIndex;
-  //             }
-  //           });
-  //         },
-  //         // touchCallback: (FlTouchEvent event, response) {
-  //         //   if (!event.isInterestedForInteractions ||
-  //         //       response == null ||
-  //         //       response.touchedSection == null) {
-  //         //     return;
-  //         //   }
-  //         //   setState(() {
-  //         //     _touchedCategoryIndex =
-  //         //         response.touchedSection!.touchedSectionIndex;
-  //         //   });
-  //         // },
-  //       ),
-  //       sections: _categoryStats!.entries.map((entry) {
-  //         final index = _categoryStats!.keys.toList().indexOf(entry.key);
-  //         final percentage = ((entry.value / totalItems) * 100).toInt();
-  //         final isTouched = _touchedCategoryIndex == index;
-
-  //         return PieChartSectionData(
-  //           color: colors[index % colors.length],
-  //           value: entry.value.toDouble(),
-  //           title: isTouched
-  //               ? '${entry.value}\n$percentage%'
-  //               : (percentage > 5 ? '$percentage%' : ''),
-  //           titleStyle: TextStyle(
-  //             fontSize: isTouched ? 10 : 12,
-  //             fontWeight: FontWeight.bold,
-  //             color: Colors.white,
-  //           ),
-  //           radius: isTouched ? 90 : 80,
-  //           showTitle: entry.value > 0,
-  //         );
-  //       }).toList(),
-  //       centerSpaceRadius: 40,
-  //       sectionsSpace: 2,
-  //     ),
-  //   );
-  // }
-
   Widget _buildCategoryPieChart() {
-    if (_isLoadingCategory) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    return StreamBuilder<Map<String, int>>(
+      stream: _categoryStatsStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    if (_categoryStats == null || _categoryStats!.isEmpty) {
-      return const Center(child: Text('No category data available'));
-    }
+        if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text('No category data available'));
+        }
 
-    final colors = [
-      Colors.blue,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.red,
-      Colors.teal,
-      Colors.indigo,
-      Colors.pink,
-    ];
+        final categoryStats = snapshot.data!;
+        final colors = [
+          Colors.blue,
+          Colors.green,
+          Colors.orange,
+          Colors.purple,
+          Colors.red,
+          Colors.teal,
+          Colors.indigo,
+          Colors.pink,
+        ];
 
-    final totalItems =
-        _categoryStats!.values.fold<int>(0, (sum, count) => sum + count);
+        final totalItems =
+            categoryStats.values.fold<int>(0, (sum, count) => sum + count);
 
-    int colorIndex = 0;
+        int colorIndex = 0;
 
-    return PieChart(
-      PieChartData(
-        pieTouchData: PieTouchData(
-          enabled: true,
-          touchCallback: (event, pieTouchResponse) {
-            setState(() {
-              if (!event.isInterestedForInteractions ||
-                  pieTouchResponse == null ||
-                  pieTouchResponse.touchedSection == null) {
-                _touchedCategoryIndex = -1;
-                return;
-              }
-              _touchedCategoryIndex =
-                  pieTouchResponse.touchedSection!.touchedSectionIndex;
-            });
-          },
-        ),
-        centerSpaceRadius: 40,
-        sections: _categoryStats!.entries.map((entry) {
-          final index = _categoryStats!.keys.toList().indexOf(entry.key);
-          final isTouched = _touchedCategoryIndex == index;
-          final color = colors[colorIndex % colors.length];
-          colorIndex++;
-          final percentage = ((entry.value / totalItems) * 100).toInt();
-
-          return PieChartSectionData(
-            color: color,
-            value: entry.value.toDouble(),
-            title: isTouched
-                ? '${entry.key}\n${entry.value} items\n$percentage%'
-                : (percentage > 5 ? '$percentage%' : ''),
-            titleStyle: TextStyle(
-              fontSize: isTouched ? 10 : 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+        return PieChart(
+          PieChartData(
+            pieTouchData: PieTouchData(
+              enabled: true,
+              touchCallback: (event, pieTouchResponse) {
+                setState(() {
+                  if (!event.isInterestedForInteractions ||
+                      pieTouchResponse == null ||
+                      pieTouchResponse.touchedSection == null) {
+                    _touchedCategoryIndex = -1;
+                    return;
+                  }
+                  _touchedCategoryIndex =
+                      pieTouchResponse.touchedSection!.touchedSectionIndex;
+                });
+              },
             ),
-            radius: isTouched ? 90 : 80,
-            showTitle: entry.value > 0,
-          );
-        }).toList(),
-        sectionsSpace: 2,
-      ),
+            centerSpaceRadius: 40,
+            sections: categoryStats.entries.map((entry) {
+              final index = categoryStats.keys.toList().indexOf(entry.key);
+              final isTouched = _touchedCategoryIndex == index;
+              final color = colors[colorIndex % colors.length];
+              colorIndex++;
+              final percentage = ((entry.value / totalItems) * 100).toInt();
+
+              return PieChartSectionData(
+                color: color,
+                value: entry.value.toDouble(),
+                title: isTouched
+                    ? '${entry.key}\n${entry.value} items\n$percentage%'
+                    : (percentage > 5 ? '$percentage%' : ''),
+                titleStyle: TextStyle(
+                  fontSize: isTouched ? 10 : 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+                radius: isTouched ? 90 : 80,
+                showTitle: entry.value > 0,
+              );
+            }).toList(),
+            sectionsSpace: 2,
+          ),
+        );
+      },
     );
   }
 
-  // Widget _buildCategoryLegend() {
-  //   return FutureBuilder<Map<String, int>>(
-  //     future: InventoryService.getCategoryStats(),
-  //     builder: (context, snapshot) {
-  //       if (snapshot.connectionState == ConnectionState.waiting) {
-  //         return const Center(child: CircularProgressIndicator());
-  //       }
-
-  //       if (snapshot.hasError || snapshot.data == null) {
-  //         return const SizedBox();
-  //       }
-
-  //       final categoryData = snapshot.data!;
-  //       if (categoryData.isEmpty) return const SizedBox();
-
-  //       // Generate colors for categories
-  //       final colors = _generateCategoryColors(categoryData.keys.length);
-  //       final sortedEntries = categoryData.entries.toList()
-  //         ..sort(
-  //             (a, b) => b.value.compareTo(a.value)); // Sort by count descending
-
-  //       return SingleChildScrollView(
-  //         child: Column(
-  //           mainAxisAlignment: MainAxisAlignment.center,
-  //           crossAxisAlignment: CrossAxisAlignment.start,
-  //           children: sortedEntries.asMap().entries.map((mapEntry) {
-  //             final index = mapEntry.key;
-  //             final entry = mapEntry.value;
-  //             final originalIndex =
-  //                 categoryData.keys.toList().indexOf(entry.key);
-
-  //             return Padding(
-  //               padding: const EdgeInsets.only(bottom: 8.0),
-  //               child: Tooltip(
-  //                 message:
-  //                     '${entry.key}: ${_getFullFormattedValue(entry.value)} items',
-  //                 child: _buildCategoryLegendItem(entry.key, entry.value,
-  //                     colors[originalIndex % colors.length]),
-  //               ),
-  //             );
-  //           }).toList(),
-  //         ),
-  //       );
-  //     },
-  //   );
-  // }
-
   Widget _buildCategoryLegendGrid() {
-    if (_isLoadingCategory) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    return StreamBuilder<Map<String, int>>(
+      stream: _categoryStatsStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    if (_categoryStats == null || _categoryStats!.isEmpty) {
-      return const SizedBox();
-    }
+        if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+          return const SizedBox();
+        }
 
-    final colors = [
-      Colors.blue,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.red,
-      Colors.teal,
-      Colors.indigo,
-      Colors.pink,
-    ];
+        final categoryStats = snapshot.data!;
+        final colors = [
+          Colors.blue,
+          Colors.green,
+          Colors.orange,
+          Colors.purple,
+          Colors.red,
+          Colors.teal,
+          Colors.indigo,
+          Colors.pink,
+        ];
 
-    final sortedEntries = _categoryStats!.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+        final sortedEntries = categoryStats.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
 
-    return SingleChildScrollView(
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 4,
-        children: sortedEntries.asMap().entries.map((mapEntry) {
-          final entry = mapEntry.value;
-          final originalIndex =
-              _categoryStats!.keys.toList().indexOf(entry.key);
+        return SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: sortedEntries.asMap().entries.map((mapEntry) {
+              final entry = mapEntry.value;
+              final originalIndex =
+                  categoryStats.keys.toList().indexOf(entry.key);
 
-          return Container(
-            constraints:
-                const BoxConstraints(maxWidth: 140), // Prevent overflow
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: colors[originalIndex % colors.length],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        entry.key,
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.white70
-                              : Colors.grey[700],
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: colors[originalIndex % colors.length],
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      Text(
-                        '${entry.value}',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.white
-                              : Colors.grey[800],
-                        ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            entry.key,
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.white70
+                                  : Colors.grey[700],
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                          Text(
+                            '${entry.value}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.white
+                                  : Colors.grey[800],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 
@@ -2267,24 +2179,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } else {
       return 'Good evening';
     }
-  }
-
-  void _showNotImplementedDialog(String feature) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Coming Soon'),
-        content: Text(
-          '$feature functionality will be available in a future update.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 
   // Widget _buildCategoryTooltip(int index) {

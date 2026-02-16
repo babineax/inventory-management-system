@@ -20,7 +20,7 @@ class UnifiedImageService {
       );
       return pickedFile;
     } catch (e) {
-      debugPrint('Error picking image from gallery: $e');
+
       return null;
     }
   }
@@ -36,7 +36,7 @@ class UnifiedImageService {
       );
       return pickedFile;
     } catch (e) {
-      debugPrint('Error picking image from camera: $e');
+
       return null;
     }
   }
@@ -46,7 +46,6 @@ class UnifiedImageService {
   /// Stores images as base64 in Firestore (compatible with free plan)
   static Future<String?> uploadProfileImage(XFile imageFile) async {
     try {
-      debugPrint('Starting profile image upload...');
 
       // Validate file size (max 2MB for base64 storage)
       final fileSize = await imageFile.length();
@@ -64,10 +63,10 @@ class UnifiedImageService {
       // Create data URL (compatible with previous implementation)
       final String dataUrl = 'data:image/jpeg;base64,$base64String';
 
-      debugPrint('Profile image converted to base64 successfully');
+
       return dataUrl;
     } catch (e) {
-      debugPrint('Error processing profile image: $e');
+
       throw Exception('Failed to process image: $e');
     }
   }
@@ -77,7 +76,6 @@ class UnifiedImageService {
   /// Stores images as base64 in Firestore (compatible with free plan)
   static Future<String?> uploadInventoryImage(XFile imageFile) async {
     try {
-      debugPrint('Starting inventory image upload...');
 
       // Validate file size (max 2MB for base64 storage)
       final fileSize = await imageFile.length();
@@ -95,10 +93,10 @@ class UnifiedImageService {
       // Create data URL (compatible with previous implementation)
       final String dataUrl = 'data:image/jpeg;base64,$base64String';
 
-      debugPrint('Inventory image converted to base64 successfully');
+
       return dataUrl;
     } catch (e) {
-      debugPrint('Error processing inventory image: $e');
+
       throw Exception('Failed to process image: $e');
     }
   }
@@ -114,7 +112,7 @@ class UnifiedImageService {
 
       return true;
     } catch (e) {
-      debugPrint('Error deleting image: $e');
+
       return false;
     }
   }

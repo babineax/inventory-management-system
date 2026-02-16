@@ -21,6 +21,15 @@ class ExpiryAlertCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get screen width to adjust padding for smaller screens
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360;
+    final cardPadding = isSmallScreen ? 12.0 : 16.0;
+    final iconPadding = isSmallScreen ? 8.0 : 12.0;
+    final spacing = isSmallScreen ? 12.0 : 16.0;
+    final titleFontSize = isSmallScreen ? 14.0 : 16.0;
+    final subtitleFontSize = isSmallScreen ? 11.0 : 12.0;
+
     return Card(
       elevation: 6,
       shape: RoundedRectangleBorder(
@@ -30,18 +39,18 @@ class ExpiryAlertCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(cardPadding),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: EdgeInsets.all(iconPadding),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: color, size: 24),
+                child: Icon(icon, color: color, size: isSmallScreen ? 20 : 24),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: spacing),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -49,17 +58,22 @@ class ExpiryAlertCard extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          title,
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.brightness ==
-                                    Brightness.dark
-                                ? Colors.white
-                                : Colors.grey[800],
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: GoogleFonts.poppins(
+                              fontSize: titleFontSize,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.brightness ==
+                                      Brightness.dark
+                                  ? Colors.white
+                                  : Colors.grey[800],
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -84,12 +98,14 @@ class ExpiryAlertCard extends StatelessWidget {
                     Text(
                       subtitle,
                       style: GoogleFonts.poppins(
-                        fontSize: 12,
+                        fontSize: subtitleFontSize,
                         color: Theme.of(context).colorScheme.brightness ==
                                 Brightness.dark
                             ? Colors.white70
                             : Colors.grey[600],
                       ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
                     ),
                   ],
                 ),

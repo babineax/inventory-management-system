@@ -6,26 +6,30 @@ class ExpiryNotificationService {
 
   /// Get all items that are expiring within the specified number of days
   static Future<List<InventoryItem>> getExpiringItems(
-      {int daysThreshold = 180}) async {
+      {int daysThreshold = 180, int minDaysThreshold = 0}) async {
     try {
       final now = DateTime.now();
       final thresholdDate = now.add(Duration(days: daysThreshold));
 
+      // Get all perishable items and filter in memory
       final querySnapshot = await _firestore
           .collection('inventory_items')
           .where('isPerishable', isEqualTo: true)
-          .where('expiryDate',
-              isLessThanOrEqualTo: Timestamp.fromDate(thresholdDate))
-          .orderBy('expiryDate')
           .get();
 
-      return querySnapshot.docs
-          .map<InventoryItem>((doc) => InventoryItem.fromDoc(doc))
-          .where((item) =>
-              item.expiryDate != null && item.expiryDate!.isAfter(now))
-          .toList();
+      final expiringItems = querySnapshot.docs
+          .map((doc) => InventoryItem.fromDoc(doc))
+          .where((item) {
+        if (item.expiryDate == null) return false;
+        final daysUntilExpiry = item.expiryDate!.difference(now).inDays;
+        return daysUntilExpiry > minDaysThreshold &&
+            daysUntilExpiry <= daysThreshold;
+      }).toList()
+        ..sort((a, b) => a.expiryDate!
+            .compareTo(b.expiryDate!)); // Sort by expiry date ascending
+
+      return expiringItems;
     } catch (e) {
-      print('Error getting expiring items: $e');
       return [];
     }
   }
@@ -35,30 +39,36 @@ class ExpiryNotificationService {
     try {
       final now = DateTime.now();
 
+      // Get all perishable items and filter in memory to avoid Firestore query limitations
       final querySnapshot = await _firestore
           .collection('inventory_items')
           .where('isPerishable', isEqualTo: true)
-          .where('expiryDate', isLessThan: Timestamp.fromDate(now))
-          .orderBy('expiryDate', descending: true)
           .get();
 
-      return querySnapshot.docs
+      final expiredItems = querySnapshot.docs
           .map((doc) => InventoryItem.fromDoc(doc))
-          .toList();
+          .where((item) {
+        if (item.expiryDate == null) return false;
+        final daysUntilExpiry = item.expiryDate!.difference(now).inDays;
+        return daysUntilExpiry < 0;
+      }).toList()
+        ..sort((a, b) => b.expiryDate!
+            .compareTo(a.expiryDate!)); // Sort by expiry date descending
+
+      return expiredItems;
     } catch (e) {
-      print('Error getting expired items: $e');
       return [];
     }
   }
 
   /// Get items expiring soon (within 30 days)
   static Future<List<InventoryItem>> getItemsExpiringSoon() async {
-    return getExpiringItems(daysThreshold: 30);
+    return getExpiringItems(daysThreshold: 30, minDaysThreshold: -1);
   }
 
   /// Get items expiring within 6 months
   static Future<List<InventoryItem>> getItemsExpiringWithin6Months() async {
-    return getExpiringItems(daysThreshold: 180);
+    return getExpiringItems(daysThreshold: 180, minDaysThreshold: 30);
   }
 
   /// Get expiry summary for dashboard
@@ -76,14 +86,74 @@ class ExpiryNotificationService {
         'immediateAttention': immediateAttentionItems.length,
       };
     } catch (e) {
-      print('Error getting expiry summary: $e');
       return {
         'expired': 0,
+        'expiringSoon': 0,
         'expiringSoon': 0,
         'expiringWithin6Months': 0,
         'immediateAttention': 0,
       };
     }
+  }
+
+  /// Real-time expiry summary stream for dashboard
+  static Stream<Map<String, int>> getExpirySummaryStream() {
+    return _firestore
+        .collection('inventory_items')
+        .where('isPerishable', isEqualTo: true)
+        .snapshots()
+        .asyncMap((snapshot) async {
+      try {
+        final items =
+            snapshot.docs.map((doc) => InventoryItem.fromDoc(doc)).toList();
+
+        final now = DateTime.now();
+        final thirtyDaysFromNow = now.add(const Duration(days: 30));
+        final sixMonthsFromNow = now.add(const Duration(days: 180));
+
+        int expired = 0;
+        int expiringSoon = 0;
+        int expiringWithin6Months = 0;
+        int immediateAttention = 0;
+
+        for (final item in items) {
+          if (item.expiryDate == null) continue;
+
+          final daysUntilExpiry = item.expiryDate!.difference(now).inDays;
+          final isFoodItem = _isFoodCategory(item.category);
+
+          if (daysUntilExpiry < 0) {
+            expired++;
+          } else if (daysUntilExpiry <= 30) {
+            expiringSoon++;
+          } else if (daysUntilExpiry > 30 && daysUntilExpiry <= 180) {
+            expiringWithin6Months++;
+          }
+
+          // Immediate attention: expired, expiring soon, or food items ≤6 months
+          // Note: immediateAttention includes overlapping categories
+          if (daysUntilExpiry < 0 ||
+              daysUntilExpiry <= 30 ||
+              (isFoodItem && daysUntilExpiry <= 180)) {
+            immediateAttention++;
+          }
+        }
+
+        return {
+          'expired': expired,
+          'expiringSoon': expiringSoon,
+          'expiringWithin6Months': expiringWithin6Months,
+          'immediateAttention': immediateAttention,
+        };
+      } catch (e) {
+        return {
+          'expired': 0,
+          'expiringSoon': 0,
+          'expiringWithin6Months': 0,
+          'immediateAttention': 0,
+        };
+      }
+    });
   }
 
   /// Get notification priority for an item
@@ -141,17 +211,14 @@ class ExpiryNotificationService {
   static Future<List<InventoryItem>> getItemsNeedingImmediateAttention() async {
     try {
       final now = DateTime.now();
-      final sixMonthsFromNow = now.add(const Duration(days: 180));
 
+      // Get all perishable items and filter in memory
       final querySnapshot = await _firestore
           .collection('inventory_items')
           .where('isPerishable', isEqualTo: true)
-          .where('expiryDate',
-              isLessThanOrEqualTo: Timestamp.fromDate(sixMonthsFromNow))
-          .orderBy('expiryDate')
           .get();
 
-      return querySnapshot.docs
+      final immediateAttentionItems = querySnapshot.docs
           .map((doc) => InventoryItem.fromDoc(doc))
           .where((item) {
         if (item.expiryDate == null) return false;
@@ -162,9 +229,12 @@ class ExpiryNotificationService {
         return daysUntilExpiry < 0 ||
             daysUntilExpiry <= 30 ||
             (isFoodItem && daysUntilExpiry <= 180);
-      }).toList();
+      }).toList()
+        ..sort((a, b) => a.expiryDate!
+            .compareTo(b.expiryDate!)); // Sort by expiry date ascending
+
+      return immediateAttentionItems;
     } catch (e) {
-      print('Error getting items needing immediate attention: $e');
       return [];
     }
   }
@@ -193,21 +263,23 @@ class ExpiryNotificationService {
   /// Stream of expiring items for real-time updates
   static Stream<List<InventoryItem>> getExpiringItemsStream(
       {int daysThreshold = 180}) {
-    final now = DateTime.now();
-    final thresholdDate = now.add(Duration(days: daysThreshold));
-
     return _firestore
         .collection('inventory_items')
         .where('isPerishable', isEqualTo: true)
-        .where('expiryDate',
-            isLessThanOrEqualTo: Timestamp.fromDate(thresholdDate))
-        .orderBy('expiryDate')
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => InventoryItem.fromDoc(doc))
-            .where((item) =>
-                item.expiryDate != null && item.expiryDate!.isAfter(now))
-            .toList());
+        .map((snapshot) {
+      final now = DateTime.now();
+      final thresholdDate = now.add(Duration(days: daysThreshold));
+
+      return snapshot.docs
+          .map((doc) => InventoryItem.fromDoc(doc))
+          .where((item) =>
+              item.expiryDate != null &&
+              item.expiryDate!.isAfter(now) &&
+              item.expiryDate!.isBefore(thresholdDate))
+          .toList()
+        ..sort((a, b) => a.expiryDate!.compareTo(b.expiryDate!));
+    });
   }
 }
 

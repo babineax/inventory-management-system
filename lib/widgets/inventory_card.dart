@@ -104,7 +104,7 @@ class InventoryCard extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: Theme.of(context)
                                     .primaryColor
-                                    .withOpacity(0.1),
+                                    .withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Text(
@@ -234,12 +234,12 @@ class InventoryCard extends StatelessWidget {
             height: 50,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
-              debugPrint('Error loading base64 item image: $error');
+
               return _buildPlaceholderIcon(context);
             },
           );
         } catch (e) {
-          debugPrint('Error decoding base64 image: $e');
+
           return _buildPlaceholderIcon(context);
         }
       } else {

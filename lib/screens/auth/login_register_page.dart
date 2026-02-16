@@ -1,19 +1,33 @@
 import 'package:flutter/material.dart';
 // import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/auth_service.dart';
-import '../../models/user_model.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:inventory_management_system/screens/auth/widget_tree.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  final bool startWithRegister;
+
+  const LoginPage({
+    super.key,
+    this.startWithRegister = false,
+  });
+
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
   String? errorMessage = '';
+  String? successMessage = '';
   bool isLoading = false;
-  bool isLogin = true;
+  late bool isLogin;
+
+  @override
+  void initState() {
+    super.initState();
+    isLogin = !widget
+        .startWithRegister; // If startWithRegister is true, show register form
+  }
 
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _controllerEmail = TextEditingController();
@@ -22,7 +36,7 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _controllerConfirmPassword =
       TextEditingController();
 
-  UserRole _selectedRole = UserRole.staff;
+  // UserRole _selectedRole = UserRole.staff; // Commented out - role determined from Firebase backend
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
@@ -35,13 +49,28 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      await AuthService.signInWithEmailAndPassword(
+      final user = await AuthService.signInWithEmailAndPassword(
         email: _controllerEmail.text.trim(),
         password: _controllerPassword.text,
-        role: _selectedRole, // Pass the selected role
+        // role: _selectedRole, // Commented out - role determined from Firebase backend
       );
-      // Success - no need to set error message
+
+      if (user != null) {
+        // Navigate to dashboard upon successful login
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const WidgetTree(),
+            ),
+          );
+        }
+      }
     } catch (e) {
+      // Clear success message on error
+      setState(() {
+        successMessage = '';
+      });
+
       // Handle specific role validation errors with popup
       if (mounted) {
         final errorMsg = e.toString().replaceAll('Exception: ', '');
@@ -80,13 +109,23 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      await AuthService.createUserWithEmailAndPassword(
+      final user = await AuthService.createUserWithEmailAndPassword(
         email: _controllerEmail.text.trim(),
         password: _controllerPassword.text,
         displayName: _controllerDisplayName.text.trim(),
         // No role parameter - will use default staff role
       );
-      // Success - no need to set error message
+
+      if (user != null) {
+        // Navigate to dashboard upon successful registration
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const WidgetTree(),
+            ),
+          );
+        }
+      }
     } catch (e) {
       // Set error message and ensure it stays visible
       if (mounted) {
@@ -240,92 +279,88 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Role Selection (only for login)
-                        if (isLogin) ...[
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 16),
-                              Text(
-                                'Select Role',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.white70
-                                      : Colors.grey[700],
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 8),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.white30
-                                        : Colors.grey[300]!,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceEvenly,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Radio<UserRole>(
-                                          value: UserRole.staff,
-                                          groupValue: _selectedRole,
-                                          onChanged: (UserRole? value) {
-                                            setState(() {
-                                              _selectedRole = value!;
-                                            });
-                                          },
-                                        ),
-                                        Text(
-                                          'Staff',
-                                          style: GoogleFonts.poppins(
-                                            color:
-                                                Theme.of(context).brightness ==
-                                                        Brightness.dark
-                                                    ? Colors.white
-                                                    : Colors.black,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Row(
-                                      children: [
-                                        Radio<UserRole>(
-                                          value: UserRole.admin,
-                                          groupValue: _selectedRole,
-                                          onChanged: (UserRole? value) {
-                                            setState(() {
-                                              _selectedRole = value!;
-                                            });
-                                          },
-                                        ),
-                                        Text(
-                                          'Admin',
-                                          style: GoogleFonts.poppins(
-                                            color:
-                                                Theme.of(context).brightness ==
-                                                        Brightness.dark
-                                                    ? Colors.white
-                                                    : Colors.black,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                        // Role Selection (only for login) - COMMENTED OUT: Role determined from Firebase backend
+                        /*
+                         if (isLogin) ...[
+                           Column(
+                             crossAxisAlignment: CrossAxisAlignment.start,
+                             children: [
+                               const SizedBox(height: 16),
+                               Text(
+                                 'Select Role',
+                                 style: GoogleFonts.poppins(
+                                   fontSize: 14,
+                                   fontWeight: FontWeight.w500,
+                                   color: Theme.of(context).brightness ==
+                                           Brightness.dark
+                                       ? Colors.white70
+                                       : Colors.grey[700],
+                                 ),
+                               ),
+                               const SizedBox(height: 8),
+                               Container(
+                                 padding: const EdgeInsets.symmetric(
+                                     horizontal: 16, vertical: 8),
+                                 decoration: BoxDecoration(
+                                   borderRadius: BorderRadius.circular(12),
+                                   border: Border.all(
+                                     color: Theme.of(context).brightness ==
+                                             Brightness.dark
+                                         ? Colors.white30
+                                         : Colors.grey[300]!,
+                                   ),
+                                 ),
+                                 child: Row(
+                                   mainAxisAlignment:
+                                       MainAxisAlignment.spaceEvenly,
+                                   children: [
+                                     RadioListTile<UserRole>(
+                                       title: Text(
+                                         'Staff',
+                                         style: GoogleFonts.poppins(
+                                           color: Theme.of(context).brightness ==
+                                                   Brightness.dark
+                                               ? Colors.white
+                                               : Colors.black,
+                                         ),
+                                       ),
+                                       value: UserRole.staff,
+                                       groupValue: _selectedRole,
+                                       onChanged: (UserRole? value) {
+                                         setState(() {
+                                           _selectedRole = value!;
+                                         });
+                                       },
+                                       dense: true,
+                                       contentPadding: EdgeInsets.zero,
+                                     ),
+                                     RadioListTile<UserRole>(
+                                       title: Text(
+                                         'Admin',
+                                         style: GoogleFonts.poppins(
+                                           color: Theme.of(context).brightness ==
+                                                   Brightness.dark
+                                               ? Colors.white
+                                               : Colors.black,
+                                         ),
+                                       ),
+                                       value: UserRole.admin,
+                                       groupValue: _selectedRole,
+                                       onChanged: (UserRole? value) {
+                                         setState(() {
+                                           _selectedRole = value!;
+                                         });
+                                       },
+                                       dense: true,
+                                       contentPadding: EdgeInsets.zero,
+                                     ),
+                                   ],
+                                 ),
+                               ),
+                             ],
+                           ),
+                         ],
+                         */
 
                         // Confirm Password (only for registration)
                         if (!isLogin) ...[
@@ -354,6 +389,33 @@ class _LoginPageState extends State<LoginPage> {
                               }
                               return null;
                             },
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+
+                        // Success Message
+                        if (successMessage != null &&
+                            successMessage!.isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.green[50],
+                              border: Border.all(color: Colors.green[200]!),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.check_circle,
+                                    color: Colors.green[600], size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    successMessage!,
+                                    style: TextStyle(color: Colors.green[600]),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 16),
                         ],
@@ -441,6 +503,7 @@ class _LoginPageState extends State<LoginPage> {
                             setState(() {
                               isLogin = !isLogin;
                               errorMessage = '';
+                              successMessage = '';
                               _formKey.currentState?.reset();
                             });
                           },
@@ -458,7 +521,7 @@ class _LoginPageState extends State<LoginPage> {
                             decoration: BoxDecoration(
                               color: Theme.of(context).brightness ==
                                       Brightness.dark
-                                  ? Colors.blue[900]!.withOpacity(0.3)
+                                  ? Colors.blue[900]!.withValues(alpha: 0.3)
                                   : Colors.blue[50],
                               border: Border.all(
                                 color: Theme.of(context).brightness ==
@@ -553,31 +616,38 @@ class _LoginPageState extends State<LoginPage> {
           ),
           ElevatedButton(
             onPressed: () async {
-              if (emailController.text.trim().isEmpty) {
+              final email = emailController.text.trim();
+
+              if (email.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Please enter your email')),
                 );
                 return;
               }
 
+              // Basic email validation
+              final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
+              if (!emailRegex.hasMatch(email)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Please enter a valid email address')),
+                );
+                return;
+              }
+
               try {
-                await AuthService.resetPassword(
-                    email: emailController.text.trim());
+                await AuthService.resetPassword(email: email);
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                        'Password reset email sent to ${emailController.text.trim()}'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+                setState(() {
+                  successMessage =
+                      'Password reset email sent to $email. Please check your email and follow the instructions to reset your password. After resetting, sign in with your new password.';
+                  errorMessage = ''; // Clear any error message
+                });
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(e.toString()),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                setState(() {
+                  errorMessage = e.toString().replaceAll('Exception: ', '');
+                  successMessage = ''; // Clear any success message
+                });
               }
             },
             style: ElevatedButton.styleFrom(

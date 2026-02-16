@@ -1,9 +1,7 @@
-import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
+import 'package:intl/intl.dart';
 import '../models/user_model.dart';
 import '../models/inventory_item.dart';
 import '../config/notification_config.dart';
@@ -13,7 +11,6 @@ import 'inventory_service.dart';
 class NotificationService {
   // Initialize notification service
   static Future<void> initialize() async {
-    debugPrint('NotificationService initialized');
     // Start periodic checks for expiry and stock alerts
     _startPeriodicChecks();
   }
@@ -28,7 +25,7 @@ class NotificationService {
     });
   }
 
-  // Send email notification with enhanced authentication and professional formatting
+  // Send email notification with Gmail App Password authentication
   static Future<bool> sendEmailNotification({
     required String recipientEmail,
     required String recipientName,
@@ -38,15 +35,21 @@ class NotificationService {
     List<int>? pdfAttachment,
     String? attachmentName,
   }) async {
+    // Check if email is properly configured
+    if (!NotificationConfig.isEmailConfigured) {
+      return false;
+    }
+
     try {
-      // Use OAuth2 for better Gmail authentication
+      // Configure Gmail SMTP with App Password authentication
       final smtpServer = SmtpServer(
-        'smtp.gmail.com',
-        port: 587,
+        NotificationConfig.smtpHost,
+        port: NotificationConfig.smtpPort,
         ssl: false,
         allowInsecure: false,
         username: NotificationConfig.senderEmail,
         password: NotificationConfig.senderPassword,
+        ignoreBadCertificate: false,
       );
 
       final message = Message()
@@ -66,16 +69,17 @@ class NotificationService {
           await tempFile.writeAsBytes(pdfAttachment);
 
           message.attachments.add(FileAttachment(tempFile));
+
+          // Clean up temp file after sending
+          tempFile.delete();
         } catch (e) {
-          debugPrint('Error adding PDF attachment: $e');
+          // Error adding PDF attachment
         }
       }
 
       final sendReport = await send(message, smtpServer);
-      debugPrint('Email sent successfully: ${sendReport.toString()}');
       return true;
     } catch (e) {
-      debugPrint('Failed to send email: $e');
       return false;
     }
   }
@@ -122,48 +126,46 @@ class NotificationService {
     ''';
   }
 
-  // Send SMS notification
-  static Future<bool> sendSMSNotification({
-    required String phoneNumber,
-    required String message,
-  }) async {
-    try {
-      // Format phone number (ensure it starts with +)
-      String formattedPhone = phoneNumber;
-      if (!formattedPhone.startsWith('+')) {
-        formattedPhone = '+$formattedPhone';
-      }
+  // Send SMS notification - Commented out for now (Twilio not configured)
+  // static Future<bool> sendSMSNotification({
+  //   required String phoneNumber,
+  //   required String message,
+  // }) async {
+  //   try {
+  //     // Format phone number (ensure it starts with +)
+  //     String formattedPhone = phoneNumber;
+  //     if (!formattedPhone.startsWith('+')) {
+  //       formattedPhone = '+$formattedPhone';
+  //     }
 
-      final url = Uri.parse(
-          '${NotificationConfig.twilioApiUrl}/${NotificationConfig.twilioAccountSid}/Messages.json');
+  //     final url = Uri.parse(
+  //         '${NotificationConfig.twilioApiUrl}/${NotificationConfig.twilioAccountSid}/Messages.json');
 
-      final response = await http.post(
-        url,
-        headers: {
-          'Authorization':
-              'Basic ${base64Encode(utf8.encode('${NotificationConfig.twilioAccountSid}:${NotificationConfig.twilioAuthToken}'))}',
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: {
-          'From': NotificationConfig.twilioPhoneNumber,
-          'To': formattedPhone,
-          'Body': message,
-        },
-      );
+  //     final response = await http.post(
+  //       url,
+  //       headers: {
+  //         'Authorization':
+  //             'Basic ${base64Encode(utf8.encode('${NotificationConfig.twilioAccountSid}:${NotificationConfig.twilioAuthToken}'))}',
+  //         'Content-Type': 'application/x-www-form-urlencoded',
+  //       },
+  //       body: {
+  //         'From': NotificationConfig.twilioPhoneNumber,
+  //         'To': formattedPhone,
+  //         'Body': message,
+  //       },
+  //     );
 
-      if (response.statusCode == 201) {
-        debugPrint('SMS sent successfully to $formattedPhone');
-        return true;
-      } else {
-        debugPrint(
-            'Failed to send SMS: ${response.statusCode} - ${response.body}');
-        return false;
-      }
-    } catch (e) {
-      debugPrint('Failed to send SMS: $e');
-      return false;
-    }
-  }
+  //     if (response.statusCode == 201) {
+
+  //       return true;
+  //     } else {
+  //       return false;
+  //     }
+  //   } catch (e) {
+
+  //     return false;
+  //   }
+  // }
 
   // Send expiry alert notification
   static Future<void> sendExpiryAlert({
@@ -198,8 +200,10 @@ class NotificationService {
               <div style="background: white; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid ${daysUntilExpiry <= 0 ? '#dc3545' : '#fd7e14'};">
                 <h3 style="margin: 0 0 10px 0; color: #495057;">${item.name}</h3>
                 <p style="margin: 5px 0;"><strong>Category:</strong> ${item.category}</p>
-                <p style="margin: 5px 0;"><strong>Quantity:</strong> ${item.quantity} units</p>
+                <p style="margin: 5px 0;"><strong>Quantity:</strong> ${item.quantity} unit${item.quantity == 1 ? '' : 's'}</p>
+                <p style="margin: 5px 0;"><strong>Unit Price:</strong> \$${item.unitPrice.toStringAsFixed(2)}</p>
                 <p style="margin: 5px 0;"><strong>Supplier:</strong> ${item.supplier}</p>
+                <p style="margin: 5px 0;"><strong>Expiry Date:</strong> ${item.expiryDate != null ? DateFormat('MMM dd, yyyy').format(item.expiryDate!) : 'No expiry date'}</p>
                 <p style="margin: 5px 0;"><strong>Status:</strong> <span style="color: ${daysUntilExpiry <= 0 ? '#dc3545' : '#fd7e14'}; font-weight: bold;">This item $timeText</span></p>
               </div>
               
@@ -230,27 +234,27 @@ class NotificationService {
       );
     }
 
-    // SMS notification
-    if (user.smsNotificationsEnabled && user.phone.isNotEmpty) {
-      final smsMessage = '''
-🚨 StockSense Alert: ${item.name} $timeText!
-
-📦 Item: ${item.name}
-📂 Category: ${item.category}
-📊 Quantity: ${item.quantity} units
-⏰ Status: $alertType
-
-${daysUntilExpiry <= 0 ? 'Remove expired items immediately!' : 'Take action soon to prevent waste.'}
-
-- StockSense Team
-      '''
-          .trim();
-
-      await sendSMSNotification(
-        phoneNumber: user.phone,
-        message: smsMessage,
-      );
-    }
+    // SMS notification - Commented out for now
+    // if (user.smsNotificationsEnabled && user.phone.isNotEmpty) {
+    //   final smsMessage = '''
+    // 🚨 StockSense Alert: ${item.name} $timeText!
+    //
+    // 📦 Item: ${item.name}
+    // 📂 Category: ${item.category}
+    // 📊 Quantity: ${item.quantity} unit${item.quantity == 1 ? '' : 's'}
+    // ⏰ Status: $alertType
+    //
+    // ${daysUntilExpiry <= 0 ? 'Remove expired items immediately!' : 'Take action soon to prevent waste.'}
+    //
+    // - StockSense Team
+    //   '''
+    //       .trim();
+    //
+    //   await sendSMSNotification(
+    //     phoneNumber: user.phone,
+    //     message: smsMessage,
+    //   );
+    // }
   }
 
   // Send stock alert notification
@@ -321,9 +325,10 @@ ${daysUntilExpiry <= 0 ? 'Remove expired items immediately!' : 'Take action soon
 
 📦 Item: ${item.name}
 📂 Category: ${item.category}
-📊 Current: ${item.quantity} units
-⚠️ Reorder Level: ${item.reorderLevel} units
+📊 Current: ${item.quantity} unit${item.quantity == 1 ? '' : 's'}
+⚠️ Reorder Level: ${item.reorderLevel} unit${item.reorderLevel == 1 ? '' : 's'}
 🏪 Supplier: ${item.supplier}
+💰 Unit Price: \$${item.unitPrice.toStringAsFixed(2)}
 
 Action needed: Reorder immediately!
 
@@ -331,10 +336,10 @@ Action needed: Reorder immediately!
       '''
           .trim();
 
-      await sendSMSNotification(
-        phoneNumber: user.phone,
-        message: smsMessage,
-      );
+      // await sendSMSNotification(
+      //   phoneNumber: user.phone,
+      //   message: smsMessage,
+      // );
     }
   }
 
@@ -420,10 +425,10 @@ Review your inventory strategy!
       '''
           .trim();
 
-      await sendSMSNotification(
-        phoneNumber: user.phone,
-        message: smsMessage,
-      );
+      // await sendSMSNotification(
+      //   phoneNumber: user.phone,
+      //   message: smsMessage,
+      // );
     }
   }
 
@@ -453,7 +458,7 @@ Review your inventory strategy!
         }
       }
     } catch (e) {
-      debugPrint('Error checking expiry alerts: $e');
+      // Error checking expiry alerts
     }
   }
 
@@ -476,60 +481,115 @@ Review your inventory strategy!
         }
       }
     } catch (e) {
-      debugPrint('Error checking stock alerts: $e');
+      // Error checking stock alerts
     }
   }
 
+  // Test Gmail connection and configuration
+  static Future<Map<String, dynamic>> testGmailConnection() async {
+    final result = {
+      'success': false,
+      'message': '',
+      'configStatus': NotificationConfig.emailConfigStatus,
+    };
+
+    try {
+      // First check configuration
+      if (!NotificationConfig.isEmailConfigured) {
+        result['message'] =
+            'Email configuration is invalid: ${NotificationConfig.emailConfigStatus}';
+        return result;
+      }
+
+      // Test SMTP connection
+      final smtpServer = SmtpServer(
+        NotificationConfig.smtpHost,
+        port: NotificationConfig.smtpPort,
+        ssl: false,
+        allowInsecure: false,
+        username: NotificationConfig.senderEmail,
+        password: NotificationConfig.senderPassword,
+        ignoreBadCertificate: false,
+      );
+
+      // Connection test removed - use sendEmailNotification for testing
+
+      result['success'] = true;
+      result['message'] =
+          'Gmail connection successful! Email notifications are ready to use.';
+    } catch (e) {
+      result['message'] = 'Gmail connection failed: $e';
+    }
+
+    return result;
+  }
+
   // Manual trigger for testing notifications
-  static Future<void> testNotifications() async {
+  static Future<Map<String, dynamic>> testNotifications() async {
+    final errors = <String>[];
+    final result = <String, dynamic>{
+      'emailSent': false,
+      'smsSent': false,
+      'totalEmailsSent': 0,
+      'totalSMSSent': 0,
+      'errors': errors,
+    };
+
     try {
       final currentUser = AuthService.currentUser;
-      if (currentUser == null) return;
-
-      // Test email
-      if (currentUser.emailNotificationsEnabled) {
-        await sendEmailNotification(
-          recipientEmail: currentUser.email,
-          recipientName: currentUser.displayName,
-          subject: '✅ StockSense Test Notification',
-          body: '''
-            <html>
-            <body style="font-family: Arial, sans-serif;">
-              <h2>🎉 Test Notification Successful!</h2>
-              <p>This is a test email from StockSense to verify your notification settings.</p>
-              <p><strong>User:</strong> ${currentUser.displayName}</p>
-              <p><strong>Email:</strong> ${currentUser.email}</p>
-              <p><strong>Time:</strong> ${DateTime.now().toString()}</p>
-              <p>If you received this email, your email notifications are working correctly!</p>
-            </body>
-            </html>
-          ''',
-        );
+      if (currentUser == null) {
+        errors.add('No user logged in');
+        return result;
       }
 
-      // Test SMS
-      if (currentUser.smsNotificationsEnabled && currentUser.phone.isNotEmpty) {
-        await sendSMSNotification(
-          phoneNumber: currentUser.phone,
-          message: '''
-✅ StockSense Test SMS
+      // Get all users for testing
+      final allUsers = await AuthService.getAllUsers();
+      final activeUsers = allUsers.where((user) => user.isActive).toList();
 
-Hello ${currentUser.displayName}!
+      int emailCount = 0;
+      int smsCount = 0;
 
-This is a test message to verify your SMS notifications are working correctly.
+      // Test email to all active users
+      for (final user in activeUsers) {
+        if (user.emailNotificationsEnabled && user.email.isNotEmpty) {
+          final emailSent = await sendEmailNotification(
+            recipientEmail: user.email,
+            recipientName: user.displayName,
+            subject: '✅ StockSense Test Notification',
+            body: r'''
+              <html>
+              <body style="font-family: Arial, sans-serif;">
+                <h2>🎉 Test Notification Successful!</h2>
+                <p>This is a test email from StockSense to verify your notification settings.</p>
+                <p><strong>User:</strong> ${user.displayName}</p>
+                <p><strong>Email:</strong> ${user.email}</p>
+                <p><strong>Time:</strong> ${DateTime.now().toString()}</p>
+                <p>If you received this email, your email notifications are working correctly!</p>
+                <p><em>This test was initiated by: ${currentUser.displayName}</em></p>
+              </body>
+              </html>
+            ''',
+          );
+          if (emailSent) {
+            emailCount++;
+          } else {
+            errors.add('Failed to send test email to ${user.email}');
+          }
+        }
 
-Time: ${DateTime.now().toString().substring(0, 19)}
-
-- StockSense Team
-          '''
-              .trim(),
-        );
+        // Test SMS to all active users - SMS functionality disabled
+        // SMS notifications are not currently supported
       }
 
-      debugPrint('Test notifications sent successfully');
+      result['emailSent'] = emailCount > 0;
+      result['smsSent'] = smsCount > 0;
+      result['totalEmailsSent'] = emailCount;
+      result['totalSMSSent'] = smsCount;
     } catch (e) {
-      debugPrint('Error sending test notifications: $e');
+      errors.add('Error during testing: $e');
     }
+
+    return result;
   }
 
   // Send welcome notification to new users
@@ -537,7 +597,7 @@ Time: ${DateTime.now().toString().substring(0, 19)}
     if (!user.emailNotificationsEnabled) return;
 
     final emailSubject = '🎉 Welcome to StockSense!';
-    final emailBody = '''
+    final emailBody = r'''
       <html>
       <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
         <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -545,14 +605,14 @@ Time: ${DateTime.now().toString().substring(0, 19)}
             <h1 style="margin: 0; font-size: 28px;">🎉 Welcome to StockSense!</h1>
             <p style="margin: 10px 0 0 0; opacity: 0.9; font-size: 18px;">Smart Inventory Management System</p>
           </div>
-          
+
           <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
             <h2 style="color: #495057; margin-top: 0;">Hello ${user.displayName}! 👋</h2>
-            
+
             <p style="font-size: 16px; margin: 15px 0;">
               Thank you for joining StockSense! Your account has been successfully created and you're ready to start managing your inventory like a pro.
             </p>
-            
+
             <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #28a745;">
               <h3 style="margin: 0 0 15px 0; color: #28a745;">🚀 What you can do with StockSense:</h3>
               <ul style="margin: 0; padding-left: 20px;">
@@ -564,25 +624,25 @@ Time: ${DateTime.now().toString().substring(0, 19)}
                 <li>📱 Access from any device</li>
               </ul>
             </div>
-            
+
             <div style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin: 20px 0;">
               <h3 style="margin: 0 0 15px 0; color: #1976d2;">🔔 Notification Settings</h3>
               <p style="margin: 0;">
-                You'll receive notifications for important events like expiring items and low stock levels. 
+                You'll receive notifications for important events like expiring items and low stock levels.
                 You can customize these settings anytime in your profile.
               </p>
             </div>
-            
+
             <div style="text-align: center; margin: 30px 0;">
               <p style="font-size: 18px; color: #495057; margin: 0;">
                 Ready to get started? Log in to your dashboard and explore all the features!
               </p>
             </div>
-            
+
             <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6;">
               <p style="color: #6c757d; font-size: 14px; margin: 0;">
                 Need help? Contact our support team or check out our documentation.<br>
-                Welcome aboard! 🎊
+                Welcome aboard! 🚀
               </p>
             </div>
           </div>

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/offline_service.dart';
+import 'home_page.dart';
 
 class AdminUserManagementScreen extends StatefulWidget {
   const AdminUserManagementScreen({super.key});
@@ -210,6 +212,16 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            // Find the HomePage and select profile tab (index 4)
+            final homeState = context.findAncestorStateOfType<HomePageState>();
+            homeState?.selectTab(4);
+            // Navigate back
+            Navigator.of(context).pop();
+          },
+        ),
         actions: [
           IconButton(
             onPressed: () async {
@@ -404,26 +416,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.all(16),
-        leading: CircleAvatar(
-          backgroundColor: user.isActive
-              ? Theme.of(context)
-                  .primaryColor
-                  .withOpacity(0.15) // Active background
-              : Colors.grey.withOpacity(0.1), // Faint background for inactive
-          child: Text(
-            user.displayName.isNotEmpty
-                ? user.displayName[0].toUpperCase()
-                : 'U',
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w600,
-              color: user.isActive
-                  ? (Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white // Active in dark mode
-                      : Theme.of(context).primaryColor) // Active in light mode
-                  : Colors.grey.withOpacity(0.5), // Faint inactive text
-            ),
-          ),
-        ),
+        leading: _buildUserAvatar(user),
         title: Text(
           user.displayName,
           style: GoogleFonts.poppins(
@@ -454,8 +447,8 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: user.role == UserRole.admin
-                        ? Colors.purple.withOpacity(0.1)
-                        : Colors.blue.withOpacity(0.1),
+                        ? Colors.purple.withValues(alpha: 0.1)
+                        : Colors.blue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -475,8 +468,8 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: user.isActive
-                        ? Colors.green.withOpacity(0.1)
-                        : Colors.red.withOpacity(0.1),
+                        ? Colors.green.withValues(alpha: 0.1)
+                        : Colors.red.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -546,6 +539,66 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
           ],
         ),
         onTap: () => _showUserDetailsDialog(user),
+      ),
+    );
+  }
+
+  Widget _buildUserAvatar(AppUser user) {
+    if (user.profilePhotoPath != null && user.profilePhotoPath!.isNotEmpty) {
+      // Handle base64 data URLs
+      if (user.profilePhotoPath!.startsWith('data:image')) {
+        try {
+          final base64String = user.profilePhotoPath!.split(',')[1];
+          final bytes = base64Decode(base64String);
+          return CircleAvatar(
+            backgroundColor: user.isActive
+                ? Theme.of(context)
+                    .primaryColor
+                    .withValues(alpha: 0.15) // Active background
+                : Colors.grey
+                    .withValues(alpha: 0.1), // Faint background for inactive
+            backgroundImage: MemoryImage(bytes),
+            onBackgroundImageError: (exception, stackTrace) {
+
+            },
+          );
+        } catch (e) {
+
+        }
+      } else {
+        // Handle network URLs
+        return CircleAvatar(
+          backgroundColor: user.isActive
+              ? Theme.of(context)
+                  .primaryColor
+                  .withValues(alpha: 0.15) // Active background
+              : Colors.grey
+                  .withValues(alpha: 0.1), // Faint background for inactive
+          backgroundImage: NetworkImage(user.profilePhotoPath!),
+          onBackgroundImageError: (exception, stackTrace) {
+
+          },
+        );
+      }
+    }
+
+    // Fallback to initials
+    return CircleAvatar(
+      backgroundColor: user.isActive
+          ? Theme.of(context)
+              .primaryColor
+              .withValues(alpha: 0.15) // Active background
+          : Colors.grey.withValues(alpha: 0.1), // Faint background for inactive
+      child: Text(
+        user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : 'U',
+        style: GoogleFonts.poppins(
+          fontWeight: FontWeight.w600,
+          color: user.isActive
+              ? (Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white // Active in dark mode
+                  : Theme.of(context).primaryColor) // Active in light mode
+              : Colors.grey.withValues(alpha: 0.5), // Faint inactive text
+        ),
       ),
     );
   }

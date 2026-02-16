@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
@@ -53,7 +52,6 @@ class ImagePickerService {
       final String downloadUrl = await taskSnapshot.ref.getDownloadURL();
       return downloadUrl;
     } catch (e) {
-      debugPrint('Error uploading profile image: $e');
       return null;
     }
   }

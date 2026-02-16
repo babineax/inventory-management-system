@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
-import '../models/user_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
+import '../models/user_model.dart';
 import '../screens/inventory_list_screen.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/stock_movements_screen.dart';
@@ -10,7 +11,8 @@ import '../screens/predictions_screen.dart';
 import '../screens/profile_screen.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, UserModel? currentUser});
+  final AppUser? currentUser;
+  const HomePage({super.key, this.currentUser});
 
   @override
   HomePageState createState() => HomePageState();
@@ -26,6 +28,8 @@ class HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _loadCurrentIndex();
+    _initializeUser();
     _loadUserProfile();
 
     // Initialize pages here so we can safely pass instance members like _onTabSelected
@@ -40,27 +44,69 @@ class HomePageState extends State<HomePage> {
 
   // keep your private helper
   void _onTabSelected(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
+    if (_currentIndex != index) {
+      setState(() {
+        _currentIndex = index;
+      });
+    }
+    _saveCurrentIndex(index);
+  }
+
+  Future<void> _loadCurrentIndex() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedIndex = prefs.getInt('current_tab_index') ?? 0;
+    if (_currentIndex != savedIndex) {
+      setState(() {
+        _currentIndex = savedIndex;
+      });
+    }
+  }
+
+  Future<void> _saveCurrentIndex(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('current_tab_index', index);
   }
 
   // **public** method other widgets can call
-  void selectTab(int index) => _onTabSelected(index);
+  void selectTab(int index) {
+    if (_currentIndex != index) {
+      _onTabSelected(index);
+    }
+    // Don't save if already selected to avoid unnecessary operations
+  }
+
+  void _initializeUser() {
+    // Use the AppUser directly since that's what we now receive
+    if (widget.currentUser != null) {
+      currentUser = widget.currentUser;
+    }
+  }
 
   Future<void> _loadUserProfile() async {
     try {
-      // Get current user from AuthService
-      currentUser = AuthService.currentUser;
+      // If we already have user data from widget, use AuthService for updates
+      if (currentUser != null) {
+        // Listen to auth state changes for updates
+        AuthService.authStateChanges.listen((user) {
+          if (mounted && user != null) {
+            setState(() {
+              currentUser = user;
+            });
+          }
+        });
+      } else {
+        // Get current user from AuthService
+        currentUser = AuthService.currentUser;
 
-      // Listen to auth state changes
-      AuthService.authStateChanges.listen((user) {
-        if (mounted) {
-          setState(() {
-            currentUser = user;
-          });
-        }
-      });
+        // Listen to auth state changes
+        AuthService.authStateChanges.listen((user) {
+          if (mounted) {
+            setState(() {
+              currentUser = user;
+            });
+          }
+        });
+      }
 
       setState(() {
         isLoading = false;
@@ -180,11 +226,11 @@ class HomePageState extends State<HomePage> {
                 : Colors.grey.withValues(alpha: 0.3),
             backgroundImage: MemoryImage(bytes),
             onBackgroundImageError: (exception, stackTrace) {
-              debugPrint('Error loading app bar avatar: $exception');
+
             },
           );
         } catch (e) {
-          debugPrint('Error decoding base64 app bar avatar: $e');
+
         }
       } else {
         // Handle network URLs
@@ -195,7 +241,7 @@ class HomePageState extends State<HomePage> {
               : Colors.grey.withValues(alpha: 0.3),
           backgroundImage: NetworkImage(currentUser!.profilePhotoPath!),
           onBackgroundImageError: (exception, stackTrace) {
-            debugPrint('Error loading network app bar avatar: $exception');
+
           },
         );
       }

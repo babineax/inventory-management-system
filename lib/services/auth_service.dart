@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../exceptions/auth_exceptions.dart';
 import 'notification_service.dart';
@@ -22,8 +23,22 @@ class AuthService {
   // Stream of auth state changes
   static Stream<AppUser?> get authStateChanges => _authStateController.stream;
 
+  // Ensure every new login session starts on the dashboard tab
+  static Future<void> _resetHomeTabIndex() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('current_tab_index', 0);
+    } catch (_) {
+      // Ignore preference errors; navigation can continue
+    }
+  }
+
   // Initialize auth service
   static Future<void> init() async {
+    // Emit initial null state to indicate no user is authenticated yet
+    _currentUser = null;
+    _authStateController.add(null);
+
     // Listen to Firebase Auth state changes
     _auth.authStateChanges().listen((User? firebaseUser) async {
       if (firebaseUser == null) {
@@ -97,7 +112,6 @@ class AuthService {
 
           _authStateController.add(_currentUser);
         } catch (e) {
-          // print('Error fetching user data: $e');
           _currentUser = null;
           _authStateController.add(null);
         }
@@ -109,7 +123,6 @@ class AuthService {
   static Future<AppUser?> signInWithEmailAndPassword({
     required String email,
     required String password,
-    UserRole? role,
   }) async {
     try {
       final UserCredential userCredential =
@@ -119,114 +132,37 @@ class AuthService {
       );
 
       if (userCredential.user != null) {
-        // Get user data from Firestore
-        final userDoc = await _firestore
-            .collection('users')
-            .doc(userCredential.user!.uid)
-            .get();
+        // The auth state listener will handle fetching user data and setting _currentUser
+        // Wait for the auth state to propagate and return the current user
+        final completer = Completer<AppUser?>();
 
-        if (userDoc.exists) {
-          final userData = userDoc.data() as Map<String, dynamic>;
-
-          // Get the user's actual role from database
-          final actualUserRole = _stringToUserRole(userData['role'] ?? 'staff');
-
-          // Check if user account is active
-          final isActive = userData['isActive'] ?? true;
-          if (!isActive) {
-            // Sign out the user immediately
-            await _auth.signOut();
-            throw Exception(
-                'Your account has been deactivated. Please contact an administrator.');
+        // Listen for the next auth state change
+        final subscription = authStateChanges.listen((user) {
+          if (!completer.isCompleted) {
+            completer.complete(user);
           }
+        });
 
-          // If a role was selected during login, validate it matches the database role
-          if (role != null && role != actualUserRole) {
-            // Sign out the user immediately
-            await _auth.signOut();
-            throw Exception(
-                'Invalid credentials. The selected role does not match your account permissions.');
-          }
+        // Set a timeout
+        final timeout = Future.delayed(const Duration(seconds: 5), () => null);
 
-          // Update last login timestamp
-          await _firestore
-              .collection('users')
-              .doc(userCredential.user!.uid)
-              .update({
-            'lastLoginAt': FieldValue.serverTimestamp(),
-          });
+        // Wait for either the auth state change or timeout
+        final result = await Future.any([completer.future, timeout]);
 
-          _currentUser = AppUser(
-            id: userCredential.user!.uid,
-            email: userCredential.user!.email ?? '',
-            displayName: userData['displayName'] ??
-                userCredential.user!.displayName ??
-                'User',
-            profilePhotoPath: userData['profilePhotoPath'],
-            role: actualUserRole, // Use the actual role from database
-            createdAt: userData['createdAt'] != null
-                ? (userData['createdAt'] as Timestamp).toDate()
-                : DateTime.now(),
-            lastLoginAt: DateTime.now(),
-            isActive: isActive,
-            phone: userData['phone'] ?? '',
-            emailNotificationsEnabled:
-                userData['emailNotificationsEnabled'] ?? true,
-            smsNotificationsEnabled:
-                userData['smsNotificationsEnabled'] ?? true,
-            expiryAlertsEnabled: userData['expiryAlertsEnabled'] ?? true,
-            stockAlertsEnabled: userData['stockAlertsEnabled'] ?? true,
-            predictionAlertsEnabled:
-                userData['predictionAlertsEnabled'] ?? true,
-          );
+        // Cancel the subscription
+        subscription.cancel();
 
-          _authStateController.add(_currentUser);
-          return _currentUser;
-        } else {
-          // If user exists in Firebase Auth but not in Firestore, create a new document
-          // For new users, use staff role by default (first user will be admin)
-          final userRole = UserRole.staff;
+        final resolvedUser = result ?? await getCurrentUserFromFirestore();
 
-          final newUser = AppUser(
-            id: userCredential.user!.uid,
-            email: userCredential.user!.email ?? '',
-            displayName: userCredential.user!.displayName ?? 'User',
-            profilePhotoPath: userCredential.user!.photoURL,
-            role: userRole,
-            createdAt: DateTime.now(),
-            lastLoginAt: DateTime.now(),
-            isActive: true,
-            phone: '',
-          );
-
-          await _firestore
-              .collection('users')
-              .doc(userCredential.user!.uid)
-              .set({
-            'email': newUser.email,
-            'displayName': newUser.displayName,
-            'profilePhotoPath': newUser.profilePhotoPath,
-            'role': newUser.role.toString().split('.').last,
-            'createdAt': FieldValue.serverTimestamp(),
-            'lastLoginAt': FieldValue.serverTimestamp(),
-            'isActive': true,
-            'phone': '',
-            'emailNotificationsEnabled': true,
-            'smsNotificationsEnabled': true,
-            'expiryAlertsEnabled': true,
-            'stockAlertsEnabled': true,
-            'predictionAlertsEnabled': true,
-          });
-
-          _currentUser = newUser;
-          _authStateController.add(_currentUser);
-          return _currentUser;
+        if (resolvedUser != null) {
+          await _resetHomeTabIndex();
         }
+
+        return resolvedUser;
       }
 
       return null;
     } catch (e) {
-      print('Sign in error: $e');
       throw AuthException('Sign in failed: ${_getAuthErrorMessage(e)}');
     }
   }
@@ -247,13 +183,8 @@ class AuthService {
 
         if (allUsersQuery.docs.isEmpty) {
           userRole = UserRole.admin;
-          print('No existing users found. Creating first user as admin.');
-        } else {
-          print(
-              'Existing users found. Creating user with role: ${userRole.toString()}');
         }
       } catch (firestoreError) {
-        print('Error checking existing users: $firestoreError');
         // If we can't check, assume it's not the first user
       }
 
@@ -301,11 +232,12 @@ class AuthService {
         _currentUser = newUser;
         _authStateController.add(_currentUser);
 
+        await _resetHomeTabIndex();
+
         // Send welcome notification
         try {
           await NotificationService.sendWelcomeNotification(newUser);
         } catch (e) {
-          print('Failed to send welcome notification: $e');
           // Don't fail user creation if notification fails
         }
 
@@ -314,7 +246,6 @@ class AuthService {
 
       return null;
     } catch (e) {
-      print('Registration error: $e');
       throw AuthException('Registration failed: ${_getAuthErrorMessage(e)}');
     }
   }
@@ -325,8 +256,8 @@ class AuthService {
       await _auth.signOut();
       _currentUser = null;
       _authStateController.add(null);
+      await _resetHomeTabIndex();
     } catch (e) {
-      print('Sign out error: $e');
       rethrow;
     }
   }
@@ -402,7 +333,6 @@ class AuthService {
         return _currentUser;
       }
     } catch (e) {
-      print('Error getting current user: $e');
       return null;
     }
   }
@@ -488,7 +418,6 @@ class AuthService {
         _authStateController.add(_currentUser);
       }
     } catch (e) {
-      print('Profile update error: $e');
       throw UserProfileUpdateException('Profile update failed: $e');
     }
   }
@@ -515,7 +444,6 @@ class AuthService {
       // Update password
       await user.updatePassword(newPassword);
     } catch (e) {
-      print('Password change error: $e');
       if (e is FirebaseAuthException) {
         switch (e.code) {
           case 'wrong-password':
@@ -537,7 +465,6 @@ class AuthService {
     try {
       await _auth.sendPasswordResetEmail(email: email);
     } catch (e) {
-      print('Password reset error: $e');
       if (e is FirebaseAuthException) {
         switch (e.code) {
           case 'user-not-found':
@@ -552,6 +479,16 @@ class AuthService {
         }
       }
       throw Exception('Failed to send password reset email: $e');
+    }
+  }
+
+  // Test password reset functionality (for debugging)
+  static Future<String> testPasswordReset(String email) async {
+    try {
+      await resetPassword(email: email);
+      return 'Password reset email sent successfully to $email';
+    } catch (e) {
+      return 'Error: ${e.toString()}';
     }
   }
 
@@ -576,7 +513,6 @@ class AuthService {
 
       return true;
     } catch (e) {
-      print('Error promoting user to admin: $e');
       throw UserPromotionException('Error promoting user to admin: $e');
     }
   }
@@ -614,7 +550,6 @@ class AuthService {
         );
       }).toList();
     } catch (e) {
-      print('Error getting all users: $e');
       throw Exception('Failed to get users: $e');
     }
   }
@@ -718,23 +653,20 @@ class AuthService {
               _authStateController.add(_currentUser);
             }
           } catch (restoreError) {
-            print('Error restoring admin session: $restoreError');
+            // Error restoring admin session
           }
         }
 
         // Send password reset email to new user for them to set their own password
         try {
           await _auth.sendPasswordResetEmail(email: email);
-          print('Password reset email sent to new user: $email');
         } catch (emailError) {
-          print('Failed to send password reset email: $emailError');
           // Check if it's a configuration issue
           if (emailError.toString().contains('auth/invalid-continue-uri') ||
               emailError
                   .toString()
                   .contains('auth/unauthorized-continue-uri')) {
-            print(
-                'Email configuration error - this is expected in development');
+            // Email configuration error - this is expected in development
           }
           // Don't fail user creation if email fails
         }
@@ -744,7 +676,6 @@ class AuthService {
 
       throw Exception('Failed to create user');
     } catch (e) {
-      print('Error creating user by admin: $e');
       if (e is FirebaseAuthException) {
         switch (e.code) {
           case 'email-already-in-use':
@@ -795,7 +726,6 @@ class AuthService {
         _authStateController.add(_currentUser);
       }
     } catch (e) {
-      print('Error updating user by admin: $e');
       throw Exception('Failed to update user: $e');
     }
   }
@@ -817,7 +747,6 @@ class AuthService {
         _authStateController.add(_currentUser);
       }
     } catch (e) {
-      print('Error toggling user status: $e');
       throw Exception('Failed to toggle user status: $e');
     }
   }
@@ -836,7 +765,6 @@ class AuthService {
       // For now, we'll just deactivate the user in Firestore
       // In a production app, you'd need to use Firebase Admin SDK on the backend
     } catch (e) {
-      print('Error deleting user: $e');
       throw Exception('Failed to delete user: $e');
     }
   }

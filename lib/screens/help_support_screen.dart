@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:share_plus/share_plus.dart';
+import '../services/notification_service.dart';
+import '../services/auth_service.dart';
 
 class HelpSupportScreen extends StatefulWidget {
   const HelpSupportScreen({super.key});
@@ -11,6 +12,9 @@ class HelpSupportScreen extends StatefulWidget {
 }
 
 class _HelpSupportScreenState extends State<HelpSupportScreen> {
+  bool _isSubmittingBug = false;
+  bool _isSubmittingFeature = false;
+
   final List<FAQItem> _faqItems = [
     FAQItem(
       question: 'How do I add a new inventory item?',
@@ -83,8 +87,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color:
-                                Theme.of(context).primaryColor.withOpacity(0.1),
+                            color: Theme.of(context)
+                                .primaryColor
+                                .withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
@@ -285,9 +290,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Column(
           children: [
@@ -349,7 +354,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Theme.of(context).primaryColor.withOpacity(0.1),
+          color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, color: Theme.of(context).primaryColor),
@@ -448,9 +453,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Column(
           children: [
@@ -519,16 +524,27 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _submitBugReport(
-                  subjectController.text, descriptionController.text);
-            },
+            onPressed: _isSubmittingBug
+                ? null
+                : () {
+                    Navigator.pop(context);
+                    _submitBugReport(
+                        subjectController.text, descriptionController.text);
+                  },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
             ),
-            child: const Text('Submit Bug Report',
-                style: TextStyle(color: Colors.white)),
+            child: _isSubmittingBug
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text('Submit Bug Report',
+                    style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -584,16 +600,27 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _submitFeatureRequest(
-                  titleController.text, descriptionController.text);
-            },
+            onPressed: _isSubmittingFeature
+                ? null
+                : () {
+                    Navigator.pop(context);
+                    _submitFeatureRequest(
+                        titleController.text, descriptionController.text);
+                  },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
             ),
-            child: const Text('Submit Request',
-                style: TextStyle(color: Colors.white)),
+            child: _isSubmittingFeature
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text('Submit Request',
+                    style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -609,38 +636,184 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
     );
   }
 
-  void _submitBugReport(String subject, String description) {
-    final bugReport = '''
-Bug Report: $subject
+  void _submitBugReport(String subject, String description) async {
+    if (subject.isEmpty || description.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill in both subject and description'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
-Description:
-$description
+    setState(() => _isSubmittingBug = true);
 
-Device Information:
-- App Version: 2.3.0
-- Platform: ${Theme.of(context).platform}
-- Timestamp: ${DateTime.now()}
+    try {
+      final currentUser = AuthService.currentUser;
+      final userInfo = currentUser != null
+          ? '\n\nReported by: ${currentUser.displayName} (${currentUser.email})'
+          : '\n\nReported by: Anonymous User';
 
-Please contact support@stocksense.com for assistance.
+      final emailBody = '''
+<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
+      <h1 style="margin: 0; font-size: 24px;">🐛 Bug Report</h1>
+      <p style="margin: 5px 0 0 0; opacity: 0.9;">StockSense Bug Report</p>
+    </div>
+
+    <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
+      <h2 style="color: #dc3545; margin-top: 0;">Bug Summary: $subject</h2>
+
+      <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc3545;">
+        <h3 style="margin: 0 0 15px 0; color: #dc3545;">📋 Description:</h3>
+        <p style="margin: 0; white-space: pre-line;">$description</p>
+      </div>
+
+      <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #17a2b8;">
+        <h3 style="margin: 0 0 15px 0; color: #17a2b8;">🔍 Technical Details:</h3>
+        <ul style="margin: 0; padding-left: 20px;">
+          <li><strong>Platform:</strong> ${Theme.of(context).platform}</li>
+          <li><strong>Timestamp:</strong> ${DateTime.now().toLocal()}</li>
+          <li><strong>App Version:</strong> 1.0.0</li>
+        </ul>
+      </div>
+
+      <div style="text-align: center; margin-top: 30px;">
+        <p style="color: #6c757d; font-size: 14px;">
+          This bug report was submitted through the StockSense mobile app.<br>
+          Please investigate and respond to the user as soon as possible.
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+$userInfo
 ''';
 
-    Share.share(bugReport, subject: 'StockSense Bug Report: $subject');
+      await NotificationService.sendEmailNotification(
+        recipientEmail: '232a.dabor@gmail.com',
+        recipientName: 'StockSense Support Team',
+        subject: '🐛 Bug Report: $subject',
+        body: emailBody,
+        isHtml: true,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bug report submitted successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to submit bug report: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmittingBug = false);
+      }
+    }
   }
 
-  void _submitFeatureRequest(String title, String description) {
-    final featureRequest = '''
-Feature Request: $title
+  void _submitFeatureRequest(String title, String description) async {
+    if (title.isEmpty || description.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill in both title and description'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
-Description:
-$description
+    setState(() => _isSubmittingFeature = true);
 
-Submitted by: StockSense User
-Timestamp: ${DateTime.now()}
+    try {
+      final currentUser = AuthService.currentUser;
+      final userInfo = currentUser != null
+          ? '\n\nRequested by: ${currentUser.displayName} (${currentUser.email})'
+          : '\n\nRequested by: Anonymous User';
 
-Please contact support@stocksense.com to discuss this feature.
+      final emailBody = '''
+<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
+      <h1 style="margin: 0; font-size: 24px;">💡 Feature Request</h1>
+      <p style="margin: 5px 0 0 0; opacity: 0.9;">StockSense Feature Request</p>
+    </div>
+
+    <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
+      <h2 style="color: #6f42c1; margin-top: 0;">Feature Title: $title</h2>
+
+      <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #6f42c1;">
+        <h3 style="margin: 0 0 15px 0; color: #6f42c1;">📝 Description:</h3>
+        <p style="margin: 0; white-space: pre-line;">$description</p>
+      </div>
+
+      <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #28a745;">
+        <h3 style="margin: 0 0 15px 0; color: #28a745;">📊 Request Details:</h3>
+        <ul style="margin: 0; padding-left: 20px;">
+          <li><strong>Submitted:</strong> ${DateTime.now().toLocal()}</li>
+          <li><strong>Priority:</strong> To be evaluated by development team</li>
+          <li><strong>Status:</strong> Under review</li>
+        </ul>
+      </div>
+
+      <div style="text-align: center; margin-top: 30px;">
+        <p style="color: #6c757d; font-size: 14px;">
+          This feature request was submitted through the StockSense mobile app.<br>
+          Our development team will review and consider this for future updates.
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+$userInfo
 ''';
 
-    Share.share(featureRequest, subject: 'StockSense Feature Request: $title');
+      await NotificationService.sendEmailNotification(
+        recipientEmail: '232a.dabor@gmail.com',
+        recipientName: 'StockSense Support Team',
+        subject: '💡 Feature Request: $title',
+        body: emailBody,
+        isHtml: true,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Feature request submitted successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to submit feature request: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmittingFeature = false);
+      }
+    }
   }
 
   Future<void> _launchEmail(String email) async {

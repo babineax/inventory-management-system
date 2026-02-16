@@ -87,7 +87,7 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               spreadRadius: 2,
             ),
@@ -185,16 +185,18 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
     required VoidCallback onTap,
     Color? color,
   }) {
-    final effectiveColor = color ?? Theme.of(context).primaryColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final effectiveColor =
+        color ?? (isDark ? Colors.white : Theme.of(context).primaryColor);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: effectiveColor.withOpacity(0.1),
+          color: effectiveColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: effectiveColor.withOpacity(0.3),
+            color: effectiveColor.withValues(alpha: 0.3),
           ),
         ),
         child: Column(
@@ -232,14 +234,14 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: _isPerishable
-                ? Theme.of(context).primaryColor.withOpacity(0.1)
+                ? Theme.of(context).primaryColor.withValues(alpha: 0.1)
                 : (Theme.of(context).brightness == Brightness.dark
                     ? Colors.grey[800]
                     : Colors.grey[50]),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _isPerishable
-                  ? Theme.of(context).primaryColor.withOpacity(0.3)
+                  ? Theme.of(context).primaryColor.withValues(alpha: 0.3)
                   : (Theme.of(context).brightness == Brightness.dark
                       ? Colors.grey[600]!
                       : Colors.grey[300]!),
@@ -251,9 +253,11 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                 duration: const Duration(milliseconds: 200),
                 child: Icon(
                   _isPerishable ? Icons.warning : Icons.info_outline,
-                  color: _isPerishable
-                      ? Theme.of(context).primaryColor
-                      : Colors.grey[600],
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? (_isPerishable ? Colors.white70 : Colors.grey[400])
+                      : (_isPerishable
+                          ? Theme.of(context).primaryColor
+                          : Colors.grey[600]),
                 ),
               ),
               const SizedBox(width: 12),
@@ -266,10 +270,10 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: _isPerishable
-                            ? Theme.of(context).primaryColor
-                            : (Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white70
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white70
+                            : (_isPerishable
+                                ? Theme.of(context).primaryColor
                                 : Colors.grey[700]),
                       ),
                     ),
@@ -281,7 +285,7 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white60
+                            ? Colors.white70
                             : Colors.grey[600],
                       ),
                     ),
@@ -301,7 +305,7 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                       }
                     });
                   },
-                  activeColor: Theme.of(context).primaryColor,
+                  activeThumbColor: Theme.of(context).primaryColor,
                 ),
               ),
             ],
@@ -336,7 +340,10 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                             children: [
                               Icon(
                                 Icons.calendar_today,
-                                color: Theme.of(context).primaryColor,
+                                color: Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.white70
+                                    : Theme.of(context).primaryColor,
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -346,12 +353,12 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                                     Text(
                                       'Expiry Date',
                                       style: GoogleFonts.poppins(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
                                         color: Theme.of(context).brightness ==
                                                 Brightness.dark
                                             ? Colors.white70
-                                            : Colors.grey[700],
+                                            : Colors.grey[500],
                                       ),
                                     ),
                                     const SizedBox(height: 4),
@@ -361,7 +368,7 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                                               .format(_selectedExpiryDate!)
                                           : 'Select expiry date',
                                       style: GoogleFonts.poppins(
-                                        fontSize: 16,
+                                        fontSize: 14,
                                         color: _selectedExpiryDate != null
                                             ? (Theme.of(context).brightness ==
                                                     Brightness.dark
@@ -369,8 +376,8 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                                                 : Colors.grey[800])
                                             : (Theme.of(context).brightness ==
                                                     Brightness.dark
-                                                ? Colors.white60
-                                                : Colors.grey[500]),
+                                                ? Colors.white70
+                                                : Colors.grey[600]),
                                       ),
                                     ),
                                   ],
@@ -384,7 +391,10 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                               Icon(
                                 Icons.arrow_forward_ios,
                                 size: 16,
-                                color: Colors.grey[400],
+                                color: Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.grey[500]
+                                    : Colors.grey[400],
                               ),
                             ],
                           ),
@@ -463,18 +473,25 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
     final daysUntilExpiry = _selectedExpiryDate!.difference(now).inDays;
 
     if (daysUntilExpiry <= 180) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.orange[50],
+          color: isDark
+              ? Colors.orange[900]!.withValues(alpha: 0.2)
+              : Colors.orange[50],
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.orange[200]!),
+          border: Border.all(
+            color: isDark
+                ? Colors.orange[700]!.withValues(alpha: 0.5)
+                : Colors.orange[200]!,
+          ),
         ),
         child: Row(
           children: [
             Icon(
               Icons.notifications_active,
-              color: Colors.orange[700],
+              color: isDark ? Colors.white : Colors.orange[700],
               size: 20,
             ),
             const SizedBox(width: 8),
@@ -487,7 +504,7 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                         : 'This item expires within 6 months. You will receive notifications.',
                 style: GoogleFonts.poppins(
                   fontSize: 12,
-                  color: Colors.orange[700],
+                  color: isDark ? Colors.white70 : Colors.orange[700],
                 ),
               ),
             ),
@@ -677,12 +694,13 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
     final imageSize = isSmallScreen ? 96.0 : 116.0;
     final iconSize = isSmallScreen ? 24.0 : 32.0;
     final fontSize = isSmallScreen ? 8.0 : 10.0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       width: imageSize,
       height: imageSize,
       decoration: BoxDecoration(
-        color: Colors.grey[200],
+        color: isDark ? Colors.grey[700] : Colors.grey[200],
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -691,13 +709,13 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
           Icon(
             Icons.broken_image,
             size: iconSize,
-            color: Colors.grey[600],
+            color: isDark ? Colors.grey[400] : Colors.grey[600],
           ),
           const SizedBox(height: 4),
           Text(
             'No Image',
             style: GoogleFonts.poppins(
-              color: Colors.grey[600],
+              color: isDark ? Colors.grey[400] : Colors.grey[600],
               fontSize: fontSize,
             ),
           ),
@@ -720,9 +738,7 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
       setState(() {
         _categories = allCategories.toList()..sort();
       });
-    } catch (e) {
-      print('Error loading categories: $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> _saveItem() async {
@@ -781,7 +797,7 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
 
           if (uploadedUrl != null) {
             finalImageUrl = uploadedUrl;
-            debugPrint('Image uploaded successfully: $uploadedUrl');
+
           } else {
             throw Exception('Failed to upload image - no URL returned');
           }
@@ -789,13 +805,13 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
           if (mounted) {
             ScaffoldMessenger.of(context).hideCurrentSnackBar();
           }
-          debugPrint('Image upload error: $uploadError');
+
           throw Exception('Failed to upload image: $uploadError');
         }
       } else if (_imageUrlController.text.trim().isNotEmpty) {
         // Use existing URL (for editing existing items)
         finalImageUrl = _imageUrlController.text.trim();
-        debugPrint('Using existing image URL: $finalImageUrl');
+
       }
 
       final item = InventoryItem(
@@ -1177,6 +1193,20 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                                       ],
                                     ),
                                   SizedBox(height: isSmallScreen ? 12 : 16),
+                                  _buildAnimatedTextFormField(
+                                    controller: _supplierController,
+                                    label: 'Supplier',
+                                    icon: Icons.business,
+                                    isSmallScreen: isSmallScreen,
+                                    validator: (value) {
+                                      if (value == null ||
+                                          value.trim().isEmpty) {
+                                        return 'Please enter supplier name';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  SizedBox(height: isSmallScreen ? 12 : 16),
                                   _buildReorderLevelDropdown(
                                       isSmallScreen: isSmallScreen),
                                 ],
@@ -1229,16 +1259,18 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
             // Loading Overlay
             if (_isLoading)
               Container(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.grey[800]
+                          : Colors.white,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           blurRadius: 10,
                           spreadRadius: 2,
                         ),
@@ -1265,7 +1297,10 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                           style: GoogleFonts.poppins(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
-                            color: Colors.grey[700],
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.white70
+                                    : Colors.grey[700],
                           ),
                         ),
                       ],
@@ -1300,12 +1335,14 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
           Container(
             padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
             decoration: BoxDecoration(
-              color: Theme.of(context).primaryColor.withOpacity(0.1),
+              color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(isSmallScreen ? 6 : 8),
             ),
             child: Icon(
               icon,
-              color: Theme.of(context).primaryColor,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white
+                  : Theme.of(context).primaryColor,
               size: isSmallScreen ? 16 : 20,
             ),
           ),
@@ -1378,7 +1415,9 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                   final hasFocus = Focus.of(context).hasFocus;
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    transform: Matrix4.identity()..scale(hasFocus ? 1.02 : 1.0),
+                    transform: hasFocus
+                        ? Matrix4.diagonal3Values(1.02, 1.02, 1.0)
+                        : Matrix4.identity(),
                     child: TextFormField(
                       controller: controller,
                       decoration: InputDecoration(
@@ -1389,7 +1428,10 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                             icon,
                             color: hasFocus
                                 ? Theme.of(context).primaryColor
-                                : Colors.grey[600],
+                                : Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.grey[400]
+                                    : Colors.grey[600],
                           ),
                         ),
                         border: OutlineInputBorder(
@@ -1482,8 +1524,14 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                   value: 'custom',
                   child: SizedBox(
                     width: double.infinity,
-                    child: const Text(
+                    child: Text(
                       '+ Add New Category',
+                      style: GoogleFonts.poppins(
+                        fontSize: isSmallScreen ? 14 : 16,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white
+                            : Colors.grey[800],
+                      ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
@@ -1557,9 +1605,14 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                         ),
                       ),
                     )),
-                const DropdownMenuItem(
+                DropdownMenuItem(
                   value: -1,
-                  child: Text('+ Custom Level'),
+                  child: Text(
+                    '+ Custom Level',
+                    style: GoogleFonts.poppins(
+                      fontSize: isSmallScreen ? 14 : 16,
+                    ),
+                  ),
                 ),
               ],
               onChanged: (value) {

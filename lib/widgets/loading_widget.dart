@@ -13,7 +13,9 @@ class LoadingWidget extends StatelessWidget {
         children: [
           CircularProgressIndicator(
             valueColor: AlwaysStoppedAnimation<Color>(
-              Theme.of(context).primaryColor,
+              Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white
+                  : Theme.of(context).primaryColor,
             ),
           ),
           const SizedBox(height: 16),
@@ -22,7 +24,9 @@ class LoadingWidget extends StatelessWidget {
               message,
               style: TextStyle(
                 fontSize: 16,
-                color: Theme.of(context).primaryColor,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white70
+                    : Theme.of(context).primaryColor,
               ),
             ),
         ],

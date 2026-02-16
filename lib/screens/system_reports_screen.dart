@@ -9,6 +9,7 @@ import '../services/inventory_service.dart';
 import '../services/auth_service.dart';
 import '../models/inventory_item.dart';
 import '../models/stock_movement.dart';
+import 'home_page.dart';
 
 import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
@@ -229,6 +230,10 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
+            // Find the HomePage and select profile tab (index 4)
+            final homeState = context.findAncestorStateOfType<HomePageState>();
+            homeState?.selectTab(4);
+            // Navigate back
             Navigator.of(context).pop();
           },
         ),
@@ -366,7 +371,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Generated on ${DateFormat('MMMM d, yyyy • h:mm a').format(generatedAt)}',
+                    'Generated on ${DateFormat('MMMM d, yyyy \'at\' h:mm a').format(generatedAt)}',
                     style: GoogleFonts.poppins(
                       fontSize: 14,
                       color: Theme.of(context).brightness == Brightness.dark
@@ -815,7 +820,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
                   //   child: _buildMonthlyTrendsChart(),
                   // ),
                   SizedBox(
-                    height: 220,
+                    height: 200,
                     child: RepaintBoundary(
                       key: _monthlyTrendsChartKey,
                       child: _buildMonthlyTrendsChart(),
@@ -1289,12 +1294,10 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
             height: 48,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
-              debugPrint('Error loading base64 item image: $error');
               return _buildItemPlaceholder();
             },
           );
         } catch (e) {
-          debugPrint('Error decoding base64 item image: $e');
           return _buildItemPlaceholder();
         }
       } else {
@@ -1305,7 +1308,6 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
           height: 48,
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
-            debugPrint('Error loading network item image: $error');
             return _buildItemPlaceholder();
           },
           loadingBuilder: (context, child, loadingProgress) {
@@ -1425,9 +1427,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
       } else if (user.email != null && user.email!.isNotEmpty) {
         displayName = user.email;
       }
-    } catch (e) {
-      debugPrint('Error accessing user display info: $e');
-    }
+    } catch (e) {}
 
     return GestureDetector(
       onTap: () {
@@ -1437,9 +1437,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
               user.profilePhotoPath!.isNotEmpty) {
             imageUrl = user.profilePhotoPath;
           }
-        } catch (e) {
-          debugPrint('Error accessing profilePhotoPath: $e');
-        }
+        } catch (e) {}
         _showImagePreview(context, imageUrl, displayName);
       },
       child: Container(
@@ -1447,9 +1445,8 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
         height: 38,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
-          color: Theme.of(context).brightness == Brightness.dark
-              ? Colors.grey[800]
-              : Colors.grey[300],
+          // Match the theme toggle tint: soft white overlay for both themes
+          color: Colors.white.withValues(alpha: 0.2),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
@@ -1472,12 +1469,10 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
             height: 48,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
-              debugPrint('Error loading base64 user image: $error');
               return _buildUserPlaceholder();
             },
           );
         } catch (e) {
-          debugPrint('Error decoding base64 user image: $e');
           return _buildUserPlaceholder();
         }
       } else {
@@ -1488,7 +1483,6 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
           height: 48,
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
-            debugPrint('Error loading network user image: $error');
             return _buildUserPlaceholder();
           },
           loadingBuilder: (context, child, loadingProgress) {
@@ -1519,15 +1513,14 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
       height: 48,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        color: Theme.of(context).brightness == Brightness.dark
-            ? Colors.grey[700]
-            : Colors.grey[200],
+        // Match the theme toggle tint: soft white overlay for both themes
+        color: Colors.white.withValues(alpha: 0.2),
       ),
       child: Icon(
         Icons.person,
         color: Theme.of(context).brightness == Brightness.dark
-            ? Colors.white60
-            : Colors.purple,
+            ? Colors.white
+            : Theme.of(context).primaryColor,
         size: 24,
       ),
     );
@@ -1761,7 +1754,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 50,
+              reservedSize: 60,
               interval: chartMaxY > 100 ? (chartMaxY / 5).ceilToDouble() : null,
               getTitlesWidget: (double value, _) {
                 return Text(
@@ -1784,15 +1777,17 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
           ),
         ),
         borderData: FlBorderData(show: false),
+        gridData: FlGridData(show: true),
         barGroups: monthlyData.asMap().entries.map((entry) {
           return BarChartGroupData(
             x: entry.key,
             barRods: [
               BarChartRodData(
                 toY: (entry.value['value'] as int).toDouble(),
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.green[400]!
-                    : Theme.of(context).primaryColor,
+                // color: Theme.of(context).brightness == Brightness.dark
+                //     ? Colors.green[400]!
+                //     : Theme.of(context).primaryColor,
+                color: Colors.green,
                 width: monthlyData.length > 8 ? 15 : 20,
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(4),
@@ -1805,123 +1800,6 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
       ),
     );
   }
-
-  // Future<void> _downloadReport(
-  //     BuildContext context, Map<String, dynamic>? reportData) async {
-  //   if (reportData == null) {
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       const SnackBar(content: Text('No report data available')),
-  //     );
-  //     return;
-  //   }
-
-  //   try {
-  //     final stats = reportData['dashboardStats'] as Map<String, dynamic>;
-  //     final generatedAt = reportData['generatedAt'] as DateTime;
-
-  //     final pdf = pdfw.Document();
-
-  //     // Capture chart images
-  //     final categoryChartBytes = await _captureChartAsImage(_categoryChartKey);
-  //     final monthlyTrendsChartBytes =
-  //         await _captureChartAsImage(_monthlyTrendsChartKey);
-
-  //     pdf.addPage(
-  //       pdfw.MultiPage(
-  //         pageFormat: PdfPageFormat.a4,
-  //         margin: const pdfw.EdgeInsets.all(24),
-  //         build: (pdfw.Context context) {
-  //           return [
-  //             // Header
-  //             pdfw.Text(
-  //               "Inventory System Report",
-  //               style: pdfw.TextStyle(
-  //                   fontSize: 22, fontWeight: pdfw.FontWeight.bold),
-  //             ),
-  //             pdfw.Text(
-  //               "Generated on ${DateFormat('MMMM d, yyyy • h:mm a').format(generatedAt)}",
-  //               style: const pdfw.TextStyle(
-  //                   fontSize: 12, color: PdfColors.grey700),
-  //             ),
-  //             pdfw.SizedBox(height: 20),
-
-  //             // Key Metrics
-  //             pdfw.Text("📈 Key Metrics",
-  //                 style: pdfw.TextStyle(
-  //                     fontSize: 16, fontWeight: pdfw.FontWeight.bold)),
-  //             pdfw.SizedBox(height: 8),
-  //             pdfw.TableHelper.fromTextArray(
-  //               headers: ["Metric", "Value"],
-  //               data: [
-  //                 ["Total Items", (stats['totalItems'] ?? 0).toString()],
-  //                 [
-  //                   "Total Value",
-  //                   "\$${NumberFormat('#,##0.00').format((stats['totalValue'] ?? 0).toDouble())}"
-  //                 ],
-  //                 ["Low Stock Items", (stats['lowStockItems'] ?? 0).toString()],
-  //                 ["Out of Stock", (stats['outOfStockItems'] ?? 0).toString()],
-  //               ],
-  //             ),
-  //             pdfw.SizedBox(height: 20),
-
-  //             // Category Chart
-  //             if (categoryChartBytes != null) ...[
-  //               pdfw.Text("📊 Items by Category",
-  //                   style: pdfw.TextStyle(
-  //                       fontSize: 16, fontWeight: pdfw.FontWeight.bold)),
-  //               pdfw.SizedBox(height: 8),
-  //               pdfw.Image(pdfw.MemoryImage(categoryChartBytes), height: 200),
-  //               pdfw.SizedBox(height: 20),
-  //             ],
-
-  //             // Monthly Trends
-  //             if (monthlyTrendsChartBytes != null) ...[
-  //               pdfw.Text("📉 Monthly Trends",
-  //                   style: pdfw.TextStyle(
-  //                       fontSize: 16, fontWeight: pdfw.FontWeight.bold)),
-  //               pdfw.SizedBox(height: 8),
-  //               pdfw.Image(pdfw.MemoryImage(monthlyTrendsChartBytes),
-  //                   height: 200),
-  //               pdfw.SizedBox(height: 20),
-  //             ],
-
-  //             pdfw.Text("📱 Generated by Inventory Management System",
-  //                 style: const pdfw.TextStyle(fontSize: 10)),
-  //           ];
-  //         },
-  //       ),
-  //     );
-
-  //     // Save with file picker
-  //     final output = await FilePicker.platform.saveFile(
-  //       dialogTitle: 'Save Report As',
-  //       fileName:
-  //           'system-report-${DateFormat('yyyy-MM-dd').format(DateTime.now())}.pdf',
-  //       type: FileType.custom,
-  //       allowedExtensions: ['pdf'],
-  //     );
-
-  //     if (output != null) {
-  //       final file = File(output);
-  //       await file.writeAsBytes(await pdf.save());
-
-  //       if (context.mounted) {
-  //         ScaffoldMessenger.of(context).showSnackBar(
-  //           SnackBar(content: Text('Report saved to $output')),
-  //         );
-  //       }
-  //     }
-  //   } catch (e) {
-  //     if (context.mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(
-  //           content: Text('Error generating report: $e'),
-  //           backgroundColor: Colors.red,
-  //         ),
-  //       );
-  //     }
-  //   }
-  // }
 
   /// Helper: Get top category
   String _getTopCategory(Map<String, dynamic> categoryStats) {
@@ -2004,7 +1882,6 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
     } catch (e) {
-      debugPrint('Chart capture error: $e');
       return null;
     }
   }
@@ -2107,7 +1984,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
               mainAxisAlignment: pdfw.MainAxisAlignment.spaceBetween,
               children: [
                 pdfw.Text(
-                  "📊 Inventory System Report",
+                  "StockSense Inventory System Report",
                   style: pdfw.TextStyle(
                     fontSize: 22,
                     fontWeight: pdfw.FontWeight.bold,
@@ -2115,7 +1992,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
                   ),
                 ),
                 pdfw.Text(
-                  DateFormat('MMMM d, yyyy • h:mm a').format(generatedAt),
+                  DateFormat('MMMM d, yyyy \'at\' h:mm a').format(generatedAt),
                   style: pdfw.TextStyle(
                     fontSize: 10,
                     color: PdfColors.grey700,
@@ -2254,510 +2131,6 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
     return pdf.save();
   }
 
-  // Future<Uint8List> _generatePdfReport({
-  //   required Map<String, dynamic> reportData,
-  //   required Color themeColor,
-  //   Uint8List? logoBytes,
-  //   Uint8List? categoryChartBytes,
-  //   Uint8List? monthlyTrendsChartBytes,
-  // }) async {
-  //   final stats = reportData['dashboardStats'] as Map<String, dynamic>;
-  //   final categoryStats =
-  //       (reportData['categoryStats'] as Map<String, dynamic>?) ?? {};
-  //   final generatedAt =
-  //       reportData['generatedAt'] as DateTime? ?? DateTime.now();
-
-  //   final pdf = pdfw.Document();
-
-  //   final brand = _pdfFromFlutterColor(themeColor);
-  //   final brandLight =
-  //       _pdfTint(themeColor, 0.85); // very light background stripe
-  //   final brandMid = _pdfTint(themeColor, 0.6);
-
-  //   pdf.addPage(
-  //     pdfw.MultiPage(
-  //       pageFormat: PdfPageFormat.a4,
-  //       margin: const pdfw.EdgeInsets.symmetric(horizontal: 28, vertical: 36),
-  //       header: (context) => pdfw.Container(
-  //         padding: const pdfw.EdgeInsets.only(bottom: 10),
-  //         child: pdfw.Row(
-  //           crossAxisAlignment: pdfw.CrossAxisAlignment.center,
-  //           mainAxisAlignment: pdfw.MainAxisAlignment.spaceBetween,
-  //           children: [
-  //             pdfw.Row(
-  //               crossAxisAlignment: pdfw.CrossAxisAlignment.center,
-  //               children: [
-  //                 if (logoBytes != null)
-  //                   pdfw.Container(
-  //                     width: 36,
-  //                     height: 36,
-  //                     decoration: pdfw.BoxDecoration(
-  //                       borderRadius: pdfw.BorderRadius.circular(8),
-  //                       color: brandLight,
-  //                     ),
-  //                     child: pdfw.Center(
-  //                       child: pdfw.Image(pdfw.MemoryImage(logoBytes),
-  //                           width: 28, height: 28, fit: pdfw.BoxFit.contain),
-  //                     ),
-  //                   )
-  //                 else
-  //                   pdfw.Container(
-  //                     width: 36,
-  //                     height: 36,
-  //                     decoration: pdfw.BoxDecoration(
-  //                       color: brand,
-  //                       borderRadius: pdfw.BorderRadius.circular(8),
-  //                     ),
-  //                   ),
-  //                 pdfw.SizedBox(width: 12),
-  //                 pdfw.Column(
-  //                   crossAxisAlignment: pdfw.CrossAxisAlignment.start,
-  //                   children: [
-  //                     pdfw.Text('Inventory System Report',
-  //                         style: pdfw.TextStyle(
-  //                           fontSize: 16,
-  //                           fontWeight: pdfw.FontWeight.bold,
-  //                           color: brand,
-  //                         )),
-  //                     pdfw.Text(
-  //                         DateFormat('MMMM d, yyyy • h:mm a')
-  //                             .format(generatedAt),
-  //                         style: pdfw.TextStyle(
-  //                             fontSize: 9, color: PdfColors.grey700)),
-  //                   ],
-  //                 ),
-  //               ],
-  //             ),
-  //             pdfw.Container(
-  //               padding: const pdfw.EdgeInsets.symmetric(
-  //                   horizontal: 10, vertical: 4),
-  //               decoration: pdfw.BoxDecoration(
-  //                 color: brandLight,
-  //                 borderRadius: pdfw.BorderRadius.circular(6),
-  //               ),
-  //               child: pdfw.Text(
-  //                 'Confidential',
-  //                 style: pdfw.TextStyle(fontSize: 9, color: brand),
-  //               ),
-  //             )
-  //           ],
-  //         ),
-  //       ),
-  //       footer: (context) => pdfw.Container(
-  //         margin: const pdfw.EdgeInsets.only(top: 10),
-  //         child: pdfw.Row(
-  //           mainAxisAlignment: pdfw.MainAxisAlignment.spaceBetween,
-  //           children: [
-  //             pdfw.Text('Generated by Inventory Management System',
-  //                 style: pdfw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-  //             pdfw.Text('Page ${context.pageNumber} of ${context.pagesCount}',
-  //                 style: pdfw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-  //           ],
-  //         ),
-  //       ),
-  //       build: (context) => [
-  //         // Colored band
-  //         pdfw.Container(
-  //           decoration: pdfw.BoxDecoration(
-  //             color: brandLight,
-  //             borderRadius: pdfw.BorderRadius.circular(8),
-  //           ),
-  //           padding: const pdfw.EdgeInsets.all(12),
-  //           child: pdfw.Row(
-  //             mainAxisAlignment: pdfw.MainAxisAlignment.spaceBetween,
-  //             children: [
-  //               pdfw.Text('Executive Summary',
-  //                   style: pdfw.TextStyle(
-  //                     fontSize: 12,
-  //                     fontWeight: pdfw.FontWeight.bold,
-  //                     color: brand,
-  //                   )),
-  //               pdfw.Text(
-  //                   'As of ${DateFormat('yyyy-MM-dd').format(generatedAt)}',
-  //                   style:
-  //                       pdfw.TextStyle(fontSize: 10, color: PdfColors.grey800)),
-  //             ],
-  //           ),
-  //         ),
-  //         pdfw.SizedBox(height: 14),
-
-  //         // Key Metrics
-  //         pdfw.Text('Key Metrics',
-  //             style: pdfw.TextStyle(
-  //                 fontSize: 14,
-  //                 fontWeight: pdfw.FontWeight.bold,
-  //                 color: brand)),
-  //         pdfw.SizedBox(height: 8),
-  //         pdfw.TableHelper.fromTextArray(
-  //           headerDecoration: pdfw.BoxDecoration(color: brand),
-  //           headerStyle: pdfw.TextStyle(
-  //               color: PdfColors.white, fontWeight: pdfw.FontWeight.bold),
-  //           cellStyle: const pdfw.TextStyle(fontSize: 10),
-  //           cellAlignments: {
-  //             0: pdfw.Alignment.centerLeft,
-  //             1: pdfw.Alignment.centerRight
-  //           },
-  //           headers: ['Metric', 'Value'],
-  //           data: [
-  //             ['Total Items', (stats['totalItems'] ?? 0).toString()],
-  //             [
-  //               'Total Value',
-  //               '\$${NumberFormat('#,##0.00').format((stats['totalValue'] ?? 0).toDouble())}'
-  //             ],
-  //             ['Low Stock Items', (stats['lowStockItems'] ?? 0).toString()],
-  //             ['Out of Stock', (stats['outOfStockItems'] ?? 0).toString()],
-  //           ],
-  //         ),
-  //         pdfw.SizedBox(height: 16),
-
-  //         // Charts block
-  //         pdfw.Text('Visuals',
-  //             style: pdfw.TextStyle(
-  //                 fontSize: 14,
-  //                 fontWeight: pdfw.FontWeight.bold,
-  //                 color: brand)),
-  //         pdfw.SizedBox(height: 8),
-  //         pdfw.Wrap(
-  //           spacing: 12,
-  //           runSpacing: 12,
-  //           children: [
-  //             if (categoryChartBytes != null)
-  //               pdfw.Container(
-  //                 width: PdfPageFormat.a4.availableWidth / 2 - 12,
-  //                 padding: const pdfw.EdgeInsets.all(8),
-  //                 decoration: pdfw.BoxDecoration(
-  //                   border: pdfw.Border.all(color: brandMid, width: 0.6),
-  //                   borderRadius: pdfw.BorderRadius.circular(8),
-  //                 ),
-  //                 child: pdfw.Column(
-  //                   crossAxisAlignment: pdfw.CrossAxisAlignment.start,
-  //                   children: [
-  //                     pdfw.Text('Items by Category',
-  //                         style: pdfw.TextStyle(
-  //                             fontSize: 11, fontWeight: pdfw.FontWeight.bold)),
-  //                     pdfw.SizedBox(height: 6),
-  //                     pdfw.Image(pdfw.MemoryImage(categoryChartBytes),
-  //                         height: 180, fit: pdfw.BoxFit.contain),
-  //                   ],
-  //                 ),
-  //               ),
-  //             if (monthlyTrendsChartBytes != null)
-  //               pdfw.Container(
-  //                 width: PdfPageFormat.a4.availableWidth / 2 - 12,
-  //                 padding: const pdfw.EdgeInsets.all(8),
-  //                 decoration: pdfw.BoxDecoration(
-  //                   border: pdfw.Border.all(color: brandMid, width: 0.6),
-  //                   borderRadius: pdfw.BorderRadius.circular(8),
-  //                 ),
-  //                 child: pdfw.Column(
-  //                   crossAxisAlignment: pdfw.CrossAxisAlignment.start,
-  //                   children: [
-  //                     pdfw.Text('Monthly Activity Trends',
-  //                         style: pdfw.TextStyle(
-  //                             fontSize: 11, fontWeight: pdfw.FontWeight.bold)),
-  //                     pdfw.SizedBox(height: 6),
-  //                     pdfw.Image(pdfw.MemoryImage(monthlyTrendsChartBytes),
-  //                         height: 180, fit: pdfw.BoxFit.contain),
-  //                   ],
-  //                 ),
-  //               ),
-  //           ],
-  //         ),
-  //         pdfw.SizedBox(height: 16),
-
-  //         // Category table
-  //         if (categoryStats.isNotEmpty) ...[
-  //           pdfw.Text('Category Breakdown',
-  //               style: pdfw.TextStyle(
-  //                   fontSize: 14,
-  //                   fontWeight: pdfw.FontWeight.bold,
-  //                   color: brand)),
-  //           pdfw.SizedBox(height: 8),
-  //           pdfw.TableHelper.fromTextArray(
-  //             headerDecoration: pdfw.BoxDecoration(color: brand),
-  //             headerStyle: pdfw.TextStyle(
-  //                 color: PdfColors.white, fontWeight: pdfw.FontWeight.bold),
-  //             cellStyle: const pdfw.TextStyle(fontSize: 10),
-  //             headers: ['Category', 'Count'],
-  //             data: categoryStats.entries
-  //                 .map((e) => [e.key, e.value.toString()])
-  //                 .toList(),
-  //           ),
-  //           pdfw.SizedBox(height: 16),
-  //         ],
-
-  //         // Insights bullets
-  //         pdfw.Text('Insights & Actions',
-  //             style: pdfw.TextStyle(
-  //                 fontSize: 14,
-  //                 fontWeight: pdfw.FontWeight.bold,
-  //                 color: brand)),
-  //         pdfw.SizedBox(height: 8),
-  //         pdfw.Bullet(
-  //           text:
-  //               'Low stock items (${stats['lowStockItems'] ?? 0}) should be reviewed for replenishment.',
-  //           style: const pdfw.TextStyle(fontSize: 10),
-  //         ),
-  //         pdfw.Bullet(
-  //           text:
-  //               'Out-of-stock items (${stats['outOfStockItems'] ?? 0}) require immediate restock to prevent stockouts.',
-  //           style: const pdfw.TextStyle(fontSize: 10),
-  //         ),
-  //         if (categoryStats.isNotEmpty)
-  //           pdfw.Bullet(
-  //             text:
-  //                 'Highest category: ${_getTopCategory(categoryStats)} — monitor usage closely.',
-  //             style: const pdfw.TextStyle(fontSize: 10),
-  //           ),
-  //       ],
-  //     ),
-  //   );
-
-  //   return pdf.save();
-  // }
-
-  // String _getTopCategory(Map<String, dynamic> categoryStats) {
-  //   if (categoryStats.isEmpty) return 'N/A';
-  //   final sorted = categoryStats.entries.toList()
-  //     ..sort((a, b) => (b.value as num).compareTo(a.value as num));
-  //   return sorted.first.key;
-  // }
-
-  // /// Generate full PDF report
-  // Future<Uint8List> _generatePdfReport(
-  //   Map<String, dynamic> reportData,
-  //   Uint8List? categoryChartBytes,
-  //   Uint8List? monthlyTrendsChartBytes,
-  // ) async {
-  //   final stats = reportData['dashboardStats'] as Map<String, dynamic>;
-  //   final categoryStats = reportData['categoryStats'] as Map<String, dynamic>;
-  //   final generatedAt = reportData['generatedAt'] as DateTime;
-
-  //   final pdf = pdfw.Document();
-
-  //   pdf.addPage(
-  //     pdfw.MultiPage(
-  //       pageFormat: PdfPageFormat.a4,
-  //       margin: const pdfw.EdgeInsets.all(24),
-  //       build: (pdfw.Context context) {
-  //         return [
-  //           // Header
-  //           pdfw.Text("Inventory System Report",
-  //               style: pdfw.TextStyle(
-  //                   fontSize: 22, fontWeight: pdfw.FontWeight.bold)),
-  //           pdfw.Text(
-  //             "Generated on ${DateFormat('MMMM d, yyyy • h:mm a').format(generatedAt)}",
-  //             style:
-  //                 const pdfw.TextStyle(fontSize: 12, color: PdfColors.grey700),
-  //           ),
-  //           pdfw.SizedBox(height: 20),
-
-  //           // Key Metrics
-  //           pdfw.Text("📈 Key Metrics",
-  //               style: pdfw.TextStyle(
-  //                   fontSize: 16, fontWeight: pdfw.FontWeight.bold)),
-  //           pdfw.SizedBox(height: 8),
-  //           pdfw.TableHelper.fromTextArray(
-  //             headers: ["Metric", "Value"],
-  //             data: [
-  //               ["Total Items", (stats['totalItems'] ?? 0).toString()],
-  //               [
-  //                 "Total Value",
-  //                 "\$${NumberFormat('#,##0.00').format((stats['totalValue'] ?? 0).toDouble())}"
-  //               ],
-  //               ["Low Stock Items", (stats['lowStockItems'] ?? 0).toString()],
-  //               ["Out of Stock", (stats['outOfStockItems'] ?? 0).toString()],
-  //             ],
-  //           ),
-  //           pdfw.SizedBox(height: 20),
-
-  //           // Category Chart
-  //           if (categoryChartBytes != null) ...[
-  //             pdfw.Text("📊 Items by Category",
-  //                 style: pdfw.TextStyle(
-  //                     fontSize: 16, fontWeight: pdfw.FontWeight.bold)),
-  //             pdfw.SizedBox(height: 8),
-  //             pdfw.Image(pdfw.MemoryImage(categoryChartBytes), height: 200),
-  //             pdfw.SizedBox(height: 20),
-  //           ],
-
-  //           // Monthly Trends Chart
-  //           if (monthlyTrendsChartBytes != null) ...[
-  //             pdfw.Text("📉 Monthly Trends",
-  //                 style: pdfw.TextStyle(
-  //                     fontSize: 16, fontWeight: pdfw.FontWeight.bold)),
-  //             pdfw.SizedBox(height: 8),
-  //             pdfw.Image(pdfw.MemoryImage(monthlyTrendsChartBytes),
-  //                 height: 200),
-  //             pdfw.SizedBox(height: 20),
-  //           ],
-
-  //           // Items by Category Table
-  //           if (categoryStats.isNotEmpty) ...[
-  //             pdfw.Text("📂 Category Breakdown",
-  //                 style: pdfw.TextStyle(
-  //                     fontSize: 16, fontWeight: pdfw.FontWeight.bold)),
-  //             pdfw.SizedBox(height: 8),
-  //             pdfw.TableHelper.fromTextArray(
-  //               headers: ["Category", "Count"],
-  //               data: categoryStats.entries
-  //                   .map((e) => [e.key, e.value.toString()])
-  //                   .toList(),
-  //             ),
-  //             pdfw.SizedBox(height: 20),
-  //           ],
-
-  //           // Footer
-  //           pdfw.Text("📱 Generated by Inventory Management System",
-  //               style: const pdfw.TextStyle(fontSize: 10)),
-  //         ];
-  //       },
-  //     ),
-  //   );
-
-  //   return pdf.save();
-  // }
-
-  /// Save PDF to user-selected location
-  // Future<void> _downloadReport(
-  //     BuildContext context, Map<String, dynamic>? reportData) async {
-  //   if (reportData == null) {
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       const SnackBar(content: Text('No report data available')),
-  //     );
-  //     return;
-  //   }
-
-  //   try {
-  //     final categoryChartBytes = await _captureChartAsImage(_categoryChartKey);
-  //     final monthlyTrendsChartBytes =
-  //         await _captureChartAsImage(_monthlyTrendsChartKey);
-
-  //     final pdfBytes = await _generatePdfReport(
-  //         reportData, categoryChartBytes, monthlyTrendsChartBytes);
-
-  //     await FileSaver.instance.saveFile(
-  //       name:
-  //           'system-report-${DateFormat('yyyy-MM-dd').format(DateTime.now())}',
-  //       bytes: pdfBytes,
-  //       ext: 'pdf',
-  //       mimeType: MimeType.pdf,
-  //     );
-
-  //     if (context.mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         const SnackBar(content: Text('Report saved successfully')),
-  //       );
-  //     }
-  //   } catch (e) {
-  //     if (context.mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Error generating report: $e')),
-  //       );
-  //     }
-  //   }
-  // }
-
-  // /// Share report via email or WhatsApp (PDF attachment)
-  // Future<void> _shareReport(
-  //     BuildContext context, Map<String, dynamic>? reportData) async {
-  //   if (reportData == null) return;
-
-  //   try {
-  //     final categoryChartBytes = await _captureChartAsImage(_categoryChartKey);
-  //     final monthlyTrendsChartBytes =
-  //         await _captureChartAsImage(_monthlyTrendsChartKey);
-
-  //     final pdfBytes = await _generatePdfReport(
-  //         reportData, categoryChartBytes, monthlyTrendsChartBytes);
-
-  //     // Save temporarily
-  //     final dir = await getTemporaryDirectory();
-  //     final filePath =
-  //         '${dir.path}/system-report-${DateFormat('yyyy-MM-dd').format(DateTime.now())}.pdf';
-  //     final file = File(filePath);
-  //     await file.writeAsBytes(pdfBytes);
-
-  //     await Share.shareXFiles(
-  //       [XFile(filePath)],
-  //       subject: "Inventory System Report",
-  //       text: "Please find the attached report.",
-  //     );
-  //   } catch (e) {
-  //     if (context.mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Error sharing report: $e')),
-  //       );
-  //     }
-  //   }
-  // }
-
-  // /// Share Report via Email
-  // Future<void> _shareViaEmail(
-  //     BuildContext context, Map<String, dynamic>? reportData) async {
-  //   if (reportData == null) return;
-
-  //   try {
-  //     final categoryChartBytes = await _captureChartAsImage(_categoryChartKey);
-  //     final monthlyTrendsChartBytes =
-  //         await _captureChartAsImage(_monthlyTrendsChartKey);
-
-  //     final pdfBytes = await _generatePdfReport(
-  //         reportData, categoryChartBytes, monthlyTrendsChartBytes);
-
-  //     final dir = await getTemporaryDirectory();
-  //     final filePath =
-  //         '${dir.path}/system-report-${DateFormat('yyyy-MM-dd').format(DateTime.now())}.pdf';
-  //     final file = File(filePath);
-  //     await file.writeAsBytes(pdfBytes);
-
-  //     await Share.shareXFiles(
-  //       [XFile(filePath)],
-  //       subject: "Inventory System Report",
-  //       text: "Please find the attached Inventory System Report.",
-  //     );
-  //   } catch (e) {
-  //     if (context.mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Error sharing via Email: $e')),
-  //       );
-  //     }
-  //   }
-  // }
-
-  // /// Share Report via WhatsApp
-  // Future<void> _shareViaWhatsApp(
-  //     BuildContext context, Map<String, dynamic>? reportData) async {
-  //   if (reportData == null) return;
-
-  //   try {
-  //     final categoryChartBytes = await _captureChartAsImage(_categoryChartKey);
-  //     final monthlyTrendsChartBytes =
-  //         await _captureChartAsImage(_monthlyTrendsChartKey);
-
-  //     final pdfBytes = await _generatePdfReport(
-  //         reportData, categoryChartBytes, monthlyTrendsChartBytes);
-
-  //     final dir = await getTemporaryDirectory();
-  //     final filePath =
-  //         '${dir.path}/system-report-${DateFormat('yyyy-MM-dd').format(DateTime.now())}.pdf';
-  //     final file = File(filePath);
-  //     await file.writeAsBytes(pdfBytes);
-
-  //     await Share.shareXFiles(
-  //       [XFile(filePath)],
-  //       subject: "Inventory System Report",
-  //       text: "📊 Inventory System Report attached as PDF",
-  //     );
-  //   } catch (e) {
-  //     if (context.mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Error sharing via WhatsApp: $e')),
-  //       );
-  //     }
-  //   }
-  // }
-
   Future<void> _shareViaEmail(
           BuildContext context, Map<String, dynamic>? data) =>
       _shareReport(context, data);
@@ -2792,9 +2165,9 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
       // Let user pick save location
       await FileSaver.instance.saveAs(
         name:
-            'system-report-${DateFormat('yyyy-MM-dd').format(DateTime.now())}.pdf',
-        ext: 'pdf',
+            'system-report-${DateFormat('yyyy-MM-dd').format(DateTime.now())}',
         bytes: pdfBytes,
+        fileExtension: 'pdf',
         mimeType: MimeType.pdf,
       );
 
@@ -2871,8 +2244,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
 
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
-    } catch (e, st) {
-      debugPrint('captureRepaintBoundaryImage error: $e\n$st');
+    } catch (e) {
       return null;
     }
   }
@@ -2908,6 +2280,26 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
       return 0.0;
     }).toList();
     final maxVal = values.reduce((a, b) => a > b ? a : b);
+
+    // Create Y-axis labels (0, 25%, 50%, 75%, 100% of max)
+    final yAxisLabels = <pdfw.Widget>[];
+    for (int i = 4; i >= 0; i--) {
+      final value = (maxVal * i / 4).round();
+      yAxisLabels.add(
+        pdfw.Container(
+          height: height * 0.7 / 4,
+          alignment: pdfw.Alignment.centerRight,
+          padding: const pdfw.EdgeInsets.only(right: 4),
+          child: pdfw.Text(
+            value >= 1000
+                ? '${(value / 1000).toStringAsFixed(1)}k'
+                : value.toString(),
+            style: pdfw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+          ),
+        ),
+      );
+    }
+
     final bars = <pdfw.Widget>[];
     for (var i = 0; i < monthlyData.length; i++) {
       final label = monthlyData[i]['month']?.toString() ?? '';
@@ -2921,7 +2313,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
               width: 12,
               height: height * 0.7 * heightRatio + 2,
               decoration: pdfw.BoxDecoration(
-                color: PdfColors.blue300,
+                color: PdfColors.green300,
                 borderRadius:
                     const pdfw.BorderRadius.all(pdfw.Radius.circular(3)),
               ),
@@ -2938,12 +2330,51 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
       );
     }
 
+    // Create grid lines
+    final gridLines = <pdfw.Widget>[];
+    for (int i = 1; i <= 4; i++) {
+      gridLines.add(
+        pdfw.Positioned(
+          top: height * 0.7 * i / 4,
+          left: 30,
+          right: 0,
+          child: pdfw.Container(
+            height: 0.5,
+            color: PdfColors.grey300,
+          ),
+        ),
+      );
+    }
+
     return pdfw.Container(
       height: height,
-      child: pdfw.Row(
-        crossAxisAlignment: pdfw.CrossAxisAlignment.end,
-        mainAxisAlignment: pdfw.MainAxisAlignment.spaceEvenly,
-        children: bars,
+      child: pdfw.Stack(
+        children: [
+          // Grid lines
+          ...gridLines,
+          // Chart content
+          pdfw.Row(
+            crossAxisAlignment: pdfw.CrossAxisAlignment.end,
+            children: [
+              // Y-axis labels
+              pdfw.Container(
+                width: 30,
+                child: pdfw.Column(
+                  mainAxisAlignment: pdfw.MainAxisAlignment.end,
+                  children: yAxisLabels,
+                ),
+              ),
+              // Bars
+              pdfw.Expanded(
+                child: pdfw.Row(
+                  crossAxisAlignment: pdfw.CrossAxisAlignment.end,
+                  mainAxisAlignment: pdfw.MainAxisAlignment.spaceEvenly,
+                  children: bars,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -3013,7 +2444,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
     final generatedAt =
         reportData['generatedAt'] as DateTime? ?? DateTime.now();
     final orgName =
-        reportData['organization'] as String? ?? 'Your Organization';
+        reportData['organization'] as String? ?? 'Name of Organization';
     final orgContact = reportData['organizationContact'] as String? ?? '';
 
     PdfColor pdfColorFromFlutter(Color color) {
@@ -3034,15 +2465,10 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
     pdfw.Widget metricCard(String label, String value, {PdfColor? accent}) {
       final accentColor = accent ?? pdfThemeColor;
       return pdfw.Container(
-        padding: const pdfw.EdgeInsets.all(10),
+        padding: const pdfw.EdgeInsets.all(12),
         decoration: pdfw.BoxDecoration(
           borderRadius: const pdfw.BorderRadius.all(pdfw.Radius.circular(8)),
-          // color: _pdfFromFlutterColor(accentColor, opacity: 0.08), // fixed
-          color: accentColor, // fixed
-          border: pdfw.Border.all(
-            // color: _pdfFromFlutterColor(accentColor, opacity: 0.18), // fixed
-            color: accentColor, // fixed
-          ),
+          color: accentColor,
         ),
         child: pdfw.Column(
           crossAxisAlignment: pdfw.CrossAxisAlignment.start,
@@ -3050,18 +2476,18 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
             pdfw.Text(
               value,
               style: pdfw.TextStyle(
-                fontSize: 16,
+                fontSize: 18,
                 fontWeight: pdfw.FontWeight.bold,
-                // color: _pdfFromFlutterColor(accentColor), // fixed
-                color: accentColor, // fixed
+                color: PdfColors.white,
               ),
             ),
             pdfw.SizedBox(height: 6),
             pdfw.Text(
               label,
-              style: const pdfw.TextStyle(
-                fontSize: 10,
-                color: PdfColors.grey700,
+              style: pdfw.TextStyle(
+                fontSize: 11,
+                fontWeight: pdfw.FontWeight.bold,
+                color: PdfColors.white,
               ),
             ),
           ],
@@ -3113,7 +2539,8 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
                 crossAxisAlignment: pdfw.CrossAxisAlignment.end,
                 children: [
                   pdfw.Text(
-                      DateFormat('MMMM d, yyyy • h:mm a').format(generatedAt),
+                      DateFormat('MMMM d, yyyy \'at\' h:mm a')
+                          .format(generatedAt),
                       style: const pdfw.TextStyle(
                           fontSize: 9, color: PdfColors.grey600)),
                   if (orgContact.isNotEmpty)
@@ -3161,7 +2588,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
           );
           children.add(pdfw.SizedBox(height: 12));
           children.add(pdfw.Text(
-              'Generated on ${DateFormat('MMMM d, yyyy • h:mm a').format(generatedAt)}',
+              'Generated on ${DateFormat('MMMM d, yyyy \'at\' h:mm a').format(generatedAt)}',
               style: const pdfw.TextStyle(
                   fontSize: 10, color: PdfColors.grey700)));
           children.add(pdfw.SizedBox(height: 18));
@@ -3207,9 +2634,9 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
             ),
           );
 
-          children.add(pdfw.SizedBox(height: 20));
+          children.add(pdfw.SizedBox(height: 16));
 
-          // Two-column: left = category chart + table, right = monthly trend + insights
+          // Charts section: category and monthly trends on same page
           children.add(
             pdfw.Row(
               crossAxisAlignment: pdfw.CrossAxisAlignment.start,
@@ -3226,15 +2653,21 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
                               fontSize: 14, fontWeight: pdfw.FontWeight.bold)),
                       pdfw.SizedBox(height: 8),
                       if (categoryChartImageBytes != null)
-                        pdfw.Container(
-                            height: 180,
-                            child: pdfw.Image(
-                                pdfw.MemoryImage(categoryChartImageBytes)))
+                        pdfw.Column(
+                          children: [
+                            pdfw.Container(
+                                height: 80,
+                                child: pdfw.Image(
+                                    pdfw.MemoryImage(categoryChartImageBytes))),
+                            pdfw.SizedBox(height: 8),
+                            _buildCategoryChartLegend(categoryStats),
+                          ],
+                        )
                       else
                         // fallback legend + small graphic
                         pdfw.Container(
                           padding: const pdfw.EdgeInsets.all(8),
-                          height: 180,
+                          height: 120,
                           decoration: pdfw.BoxDecoration(
                             border: pdfw.Border.all(color: PdfColors.grey300),
                             borderRadius: const pdfw.BorderRadius.all(
@@ -3244,38 +2677,12 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
                             children: [
                               pdfw.Expanded(
                                   child: _pdfFallbackBarChart(monthlyList,
-                                      height: 140)),
+                                      height: 100)),
                               pdfw.SizedBox(width: 8),
                               pdfw.Expanded(
                                   child: _pdfFallbackPieLegend(categoryStats)),
                             ],
                           ),
-                        ),
-
-                      pdfw.SizedBox(height: 12),
-
-                      // Category table (compact)
-                      if (categoryStats.isNotEmpty)
-                        pdfw.Column(
-                          crossAxisAlignment: pdfw.CrossAxisAlignment.start,
-                          children: [
-                            pdfw.Text('Category Breakdown',
-                                style: pdfw.TextStyle(
-                                    fontWeight: pdfw.FontWeight.bold)),
-                            pdfw.SizedBox(height: 8),
-                            pdfw.TableHelper.fromTextArray(
-                              headers: ['Category', 'Count'],
-                              data: categoryStats.entries
-                                  .map((e) => [e.key, e.value.toString()])
-                                  .toList(),
-                              headerStyle: pdfw.TextStyle(
-                                  fontWeight: pdfw.FontWeight.bold,
-                                  color: PdfColors.white),
-                              headerDecoration: const pdfw.BoxDecoration(
-                                  color: PdfColors.blueGrey800),
-                              cellHeight: 22,
-                            ),
-                          ],
                         ),
                     ],
                   ),
@@ -3296,58 +2703,20 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
                       pdfw.SizedBox(height: 8),
                       if (monthlyTrendsImageBytes != null)
                         pdfw.Container(
-                            height: 180,
+                            height: 80,
                             child: pdfw.Image(
                                 pdfw.MemoryImage(monthlyTrendsImageBytes)))
                       else
                         pdfw.Container(
                           padding: const pdfw.EdgeInsets.all(8),
-                          height: 180,
+                          height: 80,
                           decoration: pdfw.BoxDecoration(
                             border: pdfw.Border.all(color: PdfColors.grey300),
                             borderRadius: const pdfw.BorderRadius.all(
                                 pdfw.Radius.circular(6)),
                           ),
-                          child: _pdfFallbackBarChart(monthlyList, height: 150),
+                          child: _pdfFallbackBarChart(monthlyList, height: 60),
                         ),
-
-                      pdfw.SizedBox(height: 12),
-
-                      // Insights
-                      pdfw.Text('Top Insights',
-                          style: pdfw.TextStyle(
-                              fontSize: 12, fontWeight: pdfw.FontWeight.bold)),
-                      pdfw.SizedBox(height: 8),
-                      pdfw.Bullet(
-                          text:
-                              'Low stock items (${stats['lowStockItems'] ?? 0}) require attention.'),
-                      pdfw.Bullet(
-                          text:
-                              'Out-of-stock items (${stats['outOfStockItems'] ?? 0}) should be restocked immediately.'),
-                      pdfw.Bullet(
-                          text:
-                              'Top category: ${_getTopCategoryName(categoryStats)}'),
-                      pdfw.SizedBox(height: 12),
-
-                      // Top items by value
-                      pdfw.Text('Top Items by Value',
-                          style: pdfw.TextStyle(
-                              fontSize: 12, fontWeight: pdfw.FontWeight.bold)),
-                      pdfw.SizedBox(height: 8),
-                      if (items.isNotEmpty)
-                        pdfw.TableHelper.fromTextArray(
-                          headers: ['Item', 'Qty', 'Unit Price', 'Value'],
-                          data: _buildTopItemsTable(items),
-                          headerStyle: pdfw.TextStyle(
-                              fontWeight: pdfw.FontWeight.bold,
-                              color: PdfColors.white),
-                          headerDecoration: const pdfw.BoxDecoration(
-                              color: PdfColors.blueGrey800),
-                          cellHeight: 20,
-                        )
-                      else
-                        pdfw.Text('No items data available',
-                            style: const pdfw.TextStyle(color: PdfColors.grey)),
                     ],
                   ),
                 ),
@@ -3355,35 +2724,68 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
             ),
           );
 
-          // Optionally add recent movements table below on second page if needed
+          children.add(pdfw.SizedBox(height: 16));
+
+          // Top Insights
+          children.add(pdfw.Text('Top Insights',
+              style: pdfw.TextStyle(
+                  fontSize: 12, fontWeight: pdfw.FontWeight.bold)));
+          children.add(pdfw.SizedBox(height: 8));
+          children.add(pdfw.Bullet(
+              text:
+                  'Low stock items (${stats['lowStockItems'] ?? 0}) require attention.'));
+          children.add(pdfw.Bullet(
+              text:
+                  'Out-of-stock items (${stats['outOfStockItems'] ?? 0}) should be restocked immediately.'));
+          children.add(pdfw.Bullet(
+              text: 'Top category: ${_getTopCategoryName(categoryStats)}'));
+          children.add(pdfw.SizedBox(height: 12));
+
+          // Top items by value
+          children.add(pdfw.Text('Top Items by Value',
+              style: pdfw.TextStyle(
+                  fontSize: 12, fontWeight: pdfw.FontWeight.bold)));
+          children.add(pdfw.SizedBox(height: 8));
+          if (items.isNotEmpty) {
+            children.add(pdfw.TableHelper.fromTextArray(
+              headers: ['Item', 'Qty', 'Unit Price', 'Value'],
+              data: _buildTopItemsTable(items),
+              headerStyle: pdfw.TextStyle(
+                  fontWeight: pdfw.FontWeight.bold, color: PdfColors.white),
+              headerDecoration:
+                  const pdfw.BoxDecoration(color: PdfColors.blueGrey800),
+              cellHeight: 20,
+            ));
+          } else {
+            children.add(pdfw.Text('No items data available',
+                style: const pdfw.TextStyle(color: PdfColors.grey)));
+          }
+
+          children.add(pdfw.SizedBox(height: 16));
+
+          // Recent Stock Movements (moved here to fill page 1)
           if (movements.isNotEmpty) {
-            children.add(pdfw.SizedBox(height: 18));
             children.add(pdfw.Text('Recent Stock Movements',
                 style: pdfw.TextStyle(
                     fontSize: 14, fontWeight: pdfw.FontWeight.bold)));
             children.add(pdfw.SizedBox(height: 8));
 
             final movementRows = <List<dynamic>>[];
-            for (final m in movements.take(20)) {
+            for (final m in movements.take(5)) {
+              // Reduced to 5 to fit page
               final name = (m.itemName ?? m.name ?? 'Unknown').toString();
               final qty = (m.quantity ?? 0).toString();
-              final type = (m.type ?? 'N/A').toString();
+              final type = m.type.toString().split('.').last == 'stockIn'
+                  ? 'Stock In'
+                  : m.type.toString().split('.').last == 'stockOut'
+                      ? 'Stock Out'
+                      : 'Adjustment';
               final time = (m.timestamp is DateTime)
-                  ? DateFormat('yyyy-MM-dd • h:mm a')
+                  ? DateFormat('yyyy-MM-dd HH:mm')
                       .format(m.timestamp as DateTime)
                   : (m.timestamp?.toString() ?? '');
               movementRows.add([name, qty, type, time]);
             }
-
-            // for (final m in movements.take(20)) {
-            //   final name = m.itemName ?? m.name ?? 'Unknown';
-            //   final qty = m.quantity?.toString() ?? '0';
-            //   final type = m.type ?? 'N/A';
-            //   final time = (m.timestamp is DateTime)
-            //       ? DateFormat('yyyy-MM-dd • h:mm a').format(m.timestamp!)
-            //       : '';
-            //   movementRows.add([name, qty, type, time]);
-            // }
 
             children.add(
               pdfw.TableHelper.fromTextArray(
@@ -3396,6 +2798,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
                 cellHeight: 20,
               ),
             );
+            children.add(pdfw.SizedBox(height: 16));
           }
 
           return children;
@@ -3429,7 +2832,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
       });
 
       final rows = <List<dynamic>>[];
-      for (final it in itemList.take(10)) {
+      for (final it in itemList.take(5)) {
         final name = it['name'] ?? 'Item';
         final qty = (it['quantity'] ?? 0).toString();
         final unitPrice = (it['unitPrice'] ?? 0.0) as num;
@@ -3528,7 +2931,7 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
         name:
             'system-report-${DateFormat('yyyy-MM-dd').format(DateTime.now())}',
         bytes: pdfBytes,
-        ext: 'pdf',
+        fileExtension: 'pdf',
         mimeType: MimeType.pdf,
       );
 
@@ -3672,7 +3075,6 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
           },
         );
       } catch (e) {
-        debugPrint('Error decoding base64 preview image: $e');
         return const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -3722,7 +3124,6 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
           );
         },
         errorBuilder: (context, error, stackTrace) {
-          debugPrint('Error loading network preview image: $error');
           return const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -3760,6 +3161,59 @@ class _SystemReportsScreenState extends State<SystemReportsScreen>
         isStockIn ? Icons.add_circle : Icons.remove_circle,
         color: isStockIn ? Colors.green : Colors.red,
       ),
+    );
+  }
+
+  // PDF helper: build category chart legend for PDF
+  pdfw.Widget _buildCategoryChartLegend(Map<String, dynamic> categoryStats) {
+    final colors = [
+      PdfColors.blue,
+      PdfColors.green,
+      PdfColors.orange,
+      PdfColors.purple,
+      PdfColors.red,
+      PdfColors.teal,
+      PdfColors.indigo,
+      PdfColors.pink,
+    ];
+
+    final sortedEntries = categoryStats.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return pdfw.Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: sortedEntries.map((entry) {
+        // Show all categories
+        final originalIndex = categoryStats.keys.toList().indexOf(entry.key);
+        final color = colors[originalIndex % colors.length];
+
+        return pdfw.Container(
+          constraints: const pdfw.BoxConstraints(maxWidth: 120),
+          child: pdfw.Row(
+            mainAxisSize: pdfw.MainAxisSize.min,
+            children: [
+              pdfw.Container(
+                width: 8,
+                height: 8,
+                decoration: pdfw.BoxDecoration(
+                  color: color,
+                  borderRadius:
+                      const pdfw.BorderRadius.all(pdfw.Radius.circular(2)),
+                ),
+              ),
+              pdfw.SizedBox(width: 4),
+              pdfw.Text(
+                entry.key, // Show full category name without truncation
+                style: pdfw.TextStyle(
+                  fontSize: 8,
+                  color: PdfColors.grey700,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }

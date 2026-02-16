@@ -176,7 +176,9 @@ class _InventoryListScreenState extends State<InventoryListScreen>
   // Search & filter
   String searchQuery = '';
   String selectedCategory = 'All';
-  List<String> categories = ['All'];
+  List<String> categories = [
+    'All',
+  ];
   AppUser? currentUser;
 
   // Loading states
@@ -268,7 +270,9 @@ class _InventoryListScreenState extends State<InventoryListScreen>
   }
 
   void _setupTabController(List<String> loadedCats) {
-    final newCats = ['All', ...loadedCats];
+    // Remove duplicates from loaded categories
+    final uniqueCats = loadedCats.toSet().toList();
+    final newCats = ['All', ...uniqueCats];
     final initialIndex = newCats.indexOf(selectedCategory);
     // Recreate controller with the new length and the correct selected index
     final newController = TabController(
@@ -304,7 +308,7 @@ class _InventoryListScreenState extends State<InventoryListScreen>
   //     }
   //   } catch (e) {
   //     // On error, fall back to defaults
-  //     debugPrint('Error loading categories: $e');
+
   //     _setupTabController(_defaultCategories);
   //   }
 
@@ -318,7 +322,7 @@ class _InventoryListScreenState extends State<InventoryListScreen>
   //       _isInitialLoading = false;
   //     });
   //   } catch (e) {
-  //     debugPrint('Error loading initial inventory items: $e');
+
   //     // Even if error occurred, _getInventoryItemsWithFallback already returns demo data
   //     setState(() {
   //       currentUser = AuthService.currentUser;
@@ -330,6 +334,22 @@ class _InventoryListScreenState extends State<InventoryListScreen>
   Future<void> _loadInitialData() async {
     setState(() => _isInitialLoading = true);
 
+    // Load categories (with default fallback)
+    try {
+      final cats = await InventoryService.getCategories()
+          .timeout(const Duration(seconds: 5));
+      if (cats.isEmpty) {
+        _setupTabController(_defaultCategories);
+      } else {
+        _setupTabController(cats);
+      }
+    } catch (e) {
+      // On error, fall back to defaults
+
+      _setupTabController(_defaultCategories);
+    }
+
+    // Load items
     try {
       final items = await InventoryService.getInventoryItems(limit: _pageSize);
       setState(() {
@@ -340,10 +360,10 @@ class _InventoryListScreenState extends State<InventoryListScreen>
         _hasMore = items.length == _pageSize;
         currentUser = AuthService.currentUser;
       });
-    } catch (e) {
-      debugPrint('Error loading inventory items: $e');
     } finally {
-      setState(() => _isInitialLoading = false);
+      if (mounted) {
+        setState(() => _isInitialLoading = false);
+      }
     }
   }
 
@@ -387,15 +407,18 @@ class _InventoryListScreenState extends State<InventoryListScreen>
         lastDoc: _lastDocument,
       );
 
-      setState(() {
-        _allItems.addAll(items);
-        _lastDocument = items.isNotEmpty ? items.last.snapshot : _lastDocument;
-        _hasMore = items.length == _pageSize;
-      });
-    } catch (e) {
-      debugPrint('Error loading more items: $e');
+      if (mounted) {
+        setState(() {
+          _allItems.addAll(items);
+          _lastDocument =
+              items.isNotEmpty ? items.last.snapshot : _lastDocument;
+          _hasMore = items.length == _pageSize;
+        });
+      }
     } finally {
-      setState(() => _isLoadingMore = false);
+      if (mounted) {
+        setState(() => _isLoadingMore = false);
+      }
     }
   }
 
@@ -420,7 +443,6 @@ class _InventoryListScreenState extends State<InventoryListScreen>
           .timeout(const Duration(seconds: 10));
       return items;
     } catch (e) {
-      debugPrint('Error loading inventory items: $e');
       // Return empty list if database fails - no demo data
       return [];
     }
@@ -505,7 +527,8 @@ class _InventoryListScreenState extends State<InventoryListScreen>
                 // Category Tabs (with "All" default)
                 if (_tabController != null && categories.isNotEmpty)
                   Container(
-                    height: 44,
+                    constraints:
+                        const BoxConstraints(minHeight: 44, maxHeight: 60),
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
                       color: Theme.of(context).brightness == Brightness.dark
@@ -513,42 +536,50 @@ class _InventoryListScreenState extends State<InventoryListScreen>
                           : Colors.grey[100],
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: TabBar(
-                      controller: _tabController,
-                      isScrollable: true,
-                      indicatorSize: TabBarIndicatorSize.tab,
-                      indicator: BoxDecoration(
-                        color: theme.primaryColor.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      labelColor: theme.primaryColor,
-                      unselectedLabelColor:
-                          Theme.of(context).brightness == Brightness.dark
-                              ? Colors.white70
-                              : Colors.grey[700],
-                      labelStyle: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                      unselectedLabelStyle: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 12,
-                      ),
-                      tabs: categories
-                          .map(
-                            (c) => Tab(
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                                child: Text(
-                                  c,
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: TabBar(
+                        controller: _tabController,
+                        isScrollable: true,
+                        indicatorSize: TabBarIndicatorSize.tab,
+                        indicator: BoxDecoration(
+                          color: theme.primaryColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        labelColor: theme.primaryColor,
+                        unselectedLabelColor:
+                            Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white70
+                                : Colors.grey[700],
+                        labelStyle: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                        unselectedLabelStyle: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 12,
+                        ),
+                        tabs: categories
+                            .map(
+                              (c) => Tab(
+                                child: Container(
+                                  constraints: const BoxConstraints(
+                                      minWidth: 60, maxWidth: 120),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8),
+                                    child: Text(
+                                      c,
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
-                          )
-                          .toList(),
+                            )
+                            .toList(),
+                      ),
                     ),
                   ),
               ],
@@ -1167,7 +1198,7 @@ class _InventoryListScreenState extends State<InventoryListScreen>
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor.withOpacity(0.1),
+                  color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(16),
                     topRight: Radius.circular(16),
@@ -1227,7 +1258,7 @@ class _InventoryListScreenState extends State<InventoryListScreen>
                                   decoration: BoxDecoration(
                                     color: Theme.of(context)
                                         .primaryColor
-                                        .withOpacity(0.1),
+                                        .withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
@@ -1261,10 +1292,10 @@ class _InventoryListScreenState extends State<InventoryListScreen>
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.1),
+                          color: statusColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
-                          border:
-                              Border.all(color: statusColor.withOpacity(0.3)),
+                          border: Border.all(
+                              color: statusColor.withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           children: [
@@ -1492,12 +1523,10 @@ class _InventoryListScreenState extends State<InventoryListScreen>
             bytes,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
-              debugPrint('Error loading base64 item image: $error');
               return _buildImagePlaceholder();
             },
           );
         } catch (e) {
-          debugPrint('Error decoding base64 image: $e');
           return _buildImagePlaceholder();
         }
       } else {
